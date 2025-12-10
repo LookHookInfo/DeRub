@@ -1,0 +1,218 @@
+0x222A21856E13d876e46Cd52EAcEBf68E5035b1d6
+
+[{"inputs":[{"internalType":"address","name":"_hash","type":"address"},{"internalType":"address","name":"_treasury","type":"address"},{"internalType":"address","name":"_pool","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"allowance","type":"uint256"},{"internalType":"uint256","name":"needed","type":"uint256"}],"name":"ERC20InsufficientAllowance","type":"error"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"uint256","name":"balance","type":"uint256"},{"internalType":"uint256","name":"needed","type":"uint256"}],"name":"ERC20InsufficientBalance","type":"error"},{"inputs":[{"internalType":"address","name":"approver","type":"address"}],"name":"ERC20InvalidApprover","type":"error"},{"inputs":[{"internalType":"address","name":"receiver","type":"address"}],"name":"ERC20InvalidReceiver","type":"error"},{"inputs":[{"internalType":"address","name":"sender","type":"address"}],"name":"ERC20InvalidSender","type":"error"},{"inputs":[{"internalType":"address","name":"spender","type":"address"}],"name":"ERC20InvalidSpender","type":"error"},{"inputs":[{"internalType":"address","name":"token","type":"address"}],"name":"SafeERC20FailedOperation","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[],"name":"COLLATERAL_FACTOR","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"HASH","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"HASH_DECIMALS","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"borrowDRUB","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"hashAmount","type":"uint256"}],"name":"buyDRUB","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"collateral","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"debt","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"depositCollateral","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"getDrubPerHash","outputs":[{"internalType":"uint256","name":"drubPerHashScaled","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getHashPerDrubScaled","outputs":[{"internalType":"uint256","name":"priceScaled","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"liquidate","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"u","type":"address"}],"name":"maxDebt","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pool","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"repay","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newPool","type":"address"}],"name":"setPool","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newTreasury","type":"address"}],"name":"setTreasury","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"treasury","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"withdrawCollateral","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+/**
+ * @title DeRub
+ * @dev Decentralized DRUB token backed by HASH.
+ * Uses Uniswap V3 spot price (token0 = DRUB, token1 = HASH).
+ * getDrubPerHash() returns DRUB per 1 HASH scaled by 1e18.
+ */
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+interface IUniswapV3PoolMinimal {
+    function slot0() external view returns (
+        uint160 sqrtPriceX96,
+        int24, uint16, uint16, uint16, uint8, bool
+    );
+    function liquidity() external view returns (uint128);
+}
+
+contract DeRub is ERC20 {
+    using SafeERC20 for IERC20;
+
+    // === IMMUTABLES ===
+    address public immutable HASH;         // HASH token address
+    uint8   public constant HASH_DECIMALS = 18; // HASH decimals fixed to 18
+
+    // === STATE ===
+    address public treasury;              // Treasury address
+    address public pool;                  // Uniswap V3 pool (token0 = DRUB, token1 = HASH)
+    address public owner;                 // Owner until renounceOwnership
+
+    uint256 public constant COLLATERAL_FACTOR = 80; // Max borrowable % of collateral
+
+    mapping(address => uint256) public collateral; // User HASH collateral
+    mapping(address => uint256) public debt;       // User DRUB debt
+
+    // === CONSTRUCTOR ===
+    constructor(
+        address _hash,
+        address _treasury,
+        address _pool
+    ) ERC20("De Ruble", "DRUB") {
+        require(_hash != address(0), "ZERO_HASH");
+        require(_treasury != address(0), "ZERO_TREASURY");
+        require(_pool != address(0), "ZERO_POOL");
+
+        HASH = _hash;
+        treasury = _treasury;
+        pool = _pool;
+        owner = msg.sender;
+    }
+
+    // =================================================
+    //                  MODIFIERS
+    // =================================================
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "NOT_OWNER");
+        _;
+    }
+
+    // ---------------- OWNER FUNCTIONS ----------------
+
+    /// @notice Update Uniswap V3 pool for price oracle
+    function setPool(address newPool) external onlyOwner {
+        require(newPool != address(0), "ZERO");
+        pool = newPool;
+    }
+
+    /// @notice Update treasury address
+    function setTreasury(address newTreasury) external onlyOwner {
+        require(newTreasury != address(0), "ZERO");
+        treasury = newTreasury;
+    }
+
+    /// @notice Renounce ownership to make contract fully decentralized
+    function renounceOwnership() external onlyOwner {
+        owner = address(0);
+    }
+
+    // ---------------- ORACLE (SPOT, SAFE) ----------------
+
+    /**
+     * @notice Returns the spot price as stored in the pool: price = HASH / DRUB
+     * @dev priceScaled = price * 1e18  (i.e. scaled to 18 decimals)
+     *      We compute safely by reducing sqrtPriceX96 before multiplication to avoid overflow.
+     */
+    function getHashPerDrubScaled() public view returns (uint256 priceScaled) {
+        IUniswapV3PoolMinimal P = IUniswapV3PoolMinimal(pool);
+        require(P.liquidity() > 0, "NO_LIQ");
+        (uint160 sqrtPriceX96,, , , , , ) = P.slot0();
+
+        // safe approach: price = (sqrt / 2^96)^2
+        // compute a = sqrtPriceX96 * 1e18 / 2^96  (scaled)
+        // compute b = sqrtPriceX96 / 2^96
+        // priceScaled = a * b  => equals (sqrt^2 / 2^192) * 1e18
+
+        uint256 a = (uint256(sqrtPriceX96) * 1e18) / (2**96);
+        uint256 b = uint256(sqrtPriceX96) / (2**96);
+
+        priceScaled = a * b;
+        require(priceScaled > 0, "PRICE0");
+    }
+
+    /**
+     * @notice Returns DRUB per 1 HASH, scaled to 1e18 (i.e. how many DRUB you get for 1 HASH)
+     * @dev Since pool price = HASH/DRUB (token1/token0, because token0=DRUB, token1=HASH),
+     *      we invert it: DRUB/HASH = 1 / (HASH/DRUB).
+     *      priceScaled = HASH/DRUB * 1e18  => drubPerHashScaled = 1e36 / priceScaled
+     *      We compute as (1e36 / priceScaled). 1e36 fits in uint256.
+     */
+    function getDrubPerHash() public view returns (uint256 drubPerHashScaled) {
+        uint256 hashPerDrub = getHashPerDrubScaled(); // HASH per 1 DRUB, scaled 1e18
+        // invert: DRUB per 1 HASH = 1 / (HASH/DRUB)
+        // scaled: drubPerHashScaled = (1e18) / (hashPerDrub / 1e18) = 1e36 / hashPerDrub
+        // guard
+        require(hashPerDrub > 0, "PRICE0");
+        drubPerHashScaled = (1e36) / hashPerDrub;
+    }
+
+    /// @notice Convert HASH amount (raw, with 18 decimals) to DRUB amount (raw, 18 decimals)
+    function _hashToDrub(uint256 h) internal view returns (uint256) {
+        uint256 drubPerHash = getDrubPerHash(); // scaled 1e18
+        // (h * drubPerHash) / 1e18
+        return (h * drubPerHash) / 1e18;
+    }
+
+    // ---------------- INTERNAL AUTO-LIQUIDATION ----------------
+
+    /// @notice Auto-liquidate a user if debt exceeds max allowed
+    function _autoLiquidate(address user) internal {
+        uint256 d = debt[user];
+        if (d == 0) return;
+        if (d <= maxDebt(user)) return;
+
+        uint256 seized = collateral[user];
+
+        collateral[user] = 0;
+        debt[user] = 0;
+
+        // 1. Transfer HASH collateral to treasury
+        IERC20(HASH).safeTransfer(treasury, seized);
+
+        // 2. Mint DRUB equivalent to treasury
+        uint256 drubAmount = _hashToDrub(seized);
+        _mint(treasury, drubAmount);
+    }
+
+    /// @notice Maximum debt allowed for a user based on collateral
+    function maxDebt(address u) public view returns (uint256) {
+        return (_hashToDrub(collateral[u]) * COLLATERAL_FACTOR) / 100;
+    }
+
+    // ---------------- COLLATERAL ----------------
+
+    /// @notice Deposit HASH as collateral
+    function depositCollateral(uint256 amount) external {
+        _autoLiquidate(msg.sender);
+        IERC20(HASH).safeTransferFrom(msg.sender, address(this), amount);
+        collateral[msg.sender] += amount;
+    }
+
+    /// @notice Withdraw HASH collateral with debt check
+    function withdrawCollateral(uint256 amount) external {
+        _autoLiquidate(msg.sender);
+        require(collateral[msg.sender] >= amount, "NO_COLL");
+        collateral[msg.sender] -= amount;
+        require(debt[msg.sender] <= maxDebt(msg.sender), "UNDER");
+        IERC20(HASH).safeTransfer(msg.sender, amount);
+    }
+
+    // ---------------- BORROW ----------------
+
+    /// @notice Borrow DRUB against HASH collateral
+    function borrowDRUB(uint256 amount) external {
+        _autoLiquidate(msg.sender);
+        require(debt[msg.sender] + amount <= maxDebt(msg.sender), "LIMIT");
+        debt[msg.sender] += amount;
+        _mint(msg.sender, amount);
+    }
+
+    /// @notice Repay DRUB debt
+    function repay(uint256 amount) external {
+        _autoLiquidate(msg.sender);
+        _burn(msg.sender, amount);
+        debt[msg.sender] -= amount;
+    }
+
+    // ---------------- BUY ----------------
+
+    /// @notice Buy DRUB using HASH; DRUB equivalent goes to treasury
+    function buyDRUB(uint256 hashAmount) external {
+        _autoLiquidate(msg.sender);
+        uint256 drubAmount = _hashToDrub(hashAmount);
+
+        // 1. Transfer HASH to treasury
+        IERC20(HASH).safeTransferFrom(msg.sender, treasury, hashAmount);
+
+        // 2. Mint DRUB to user
+        _mint(msg.sender, drubAmount);
+
+        // 3. Mint DRUB equivalent to treasury
+        _mint(treasury, drubAmount);
+    }
+
+    // ---------------- MANUAL LIQUIDATION ----------------
+
+    /// @notice Anyone can manually liquidate a user
+    function liquidate(address user) external {
+        _autoLiquidate(user);
+    }
+}

@@ -1,0 +1,179 @@
+0x0F7d469cefA13B8Fca207fe90f4C4121BE1da4BA
+
+[{"inputs":[{"internalType":"address","name":"initialDrub","type":"address"},{"internalType":"address","name":"initialPool","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount0","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount1","type":"uint256"}],"name":"LiquidityAdded","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"oldPool","type":"address"},{"indexed":false,"internalType":"address","name":"newPool","type":"address"}],"name":"PoolUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"oldToken","type":"address"},{"indexed":false,"internalType":"address","name":"newToken","type":"address"}],"name":"TokenUpdated","type":"event"},{"inputs":[],"name":"FEE","outputs":[{"internalType":"uint24","name":"","type":"uint24"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"HASH","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"POSITION_MANAGER","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"addLiquidity","outputs":[{"internalType":"uint256","name":"positionId","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"currentPositionId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"drubToken","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getPrice","outputs":[{"internalType":"uint256","name":"price","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"poolAddress","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newToken","type":"address"}],"name":"updateDrubToken","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newPool","type":"address"}],"name":"updatePool","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
+
+/**
+ * @title DrubTreasuryVault (purpose — providing liquidity)
+ * @dev Vault for DRUB and HASH.
+ * Anyone can add liquidity (Uniswap V3 NFT positions).
+ */
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+interface INonfungiblePositionManager {
+    struct MintParams {
+        address token0;
+        address token1;
+        uint24 fee;
+        int24 tickLower;
+        int24 tickUpper;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        address recipient;
+        uint256 deadline;
+    }
+
+    function mint(MintParams calldata params)
+        external
+        payable
+        returns (
+            uint256 tokenId,
+            uint128 liquidity,
+            uint256 amount0,
+            uint256 amount1
+        );
+}
+
+interface IUniswapV3Pool {
+    function slot0() external view returns (
+        uint160 sqrtPriceX96,
+        int24 tick,
+        uint16 observationIndex,
+        uint16 observationCardinality,
+        uint16 observationCardinalityNext,
+        uint8 feeProtocol,
+        bool unlocked
+    );
+}
+
+contract DrubTreasuryVault is Ownable {
+
+    address public constant HASH = 0xA9B631ABcc4fd0bc766d7C0C8fCbf866e2bB0445;
+    address public constant POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1;
+    uint24 public constant FEE = 100;
+
+    address public drubToken;
+    address public poolAddress;
+    uint256 public currentPositionId;
+
+    event LiquidityAdded(uint256 id, uint256 amount0, uint256 amount1);
+    event PoolUpdated(address oldPool, address newPool);
+    event TokenUpdated(address oldToken, address newToken);
+
+    constructor(address initialDrub, address initialPool) Ownable(msg.sender) {
+        require(initialDrub != address(0), "bad drub");
+        require(initialPool != address(0), "bad pool");
+
+        drubToken = initialDrub;
+        poolAddress = initialPool;
+
+        IERC20(HASH).approve(POSITION_MANAGER, type(uint256).max);
+        IERC20(drubToken).approve(POSITION_MANAGER, type(uint256).max);
+    }
+
+    // -------------------------------------------------
+    // Price from Uniswap pool
+    // -------------------------------------------------
+    function getPrice() public view returns (uint256 price) {
+        (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(poolAddress).slot0();
+        uint256 p = uint256(sqrtPriceX96) * uint256(sqrtPriceX96) >> 192;
+        bool hash0 = HASH < drubToken;
+        price = hash0 ? p : 1e36 / p;
+    }
+
+    // -------------------------------------------------
+    // Internal helpers
+    // -------------------------------------------------
+    struct Amounts {
+        address token0;
+        address token1;
+        uint256 amount0;
+        uint256 amount1;
+    }
+
+    /**
+     * @notice Determines token0 based on total value in vault.
+     * Token with smaller total value becomes token0.
+     */
+    function _computeAmounts(uint256 price) internal view returns (Amounts memory A) {
+        uint256 hb = IERC20(HASH).balanceOf(address(this));
+        uint256 db = IERC20(drubToken).balanceOf(address(this));
+        require(hb > 0 && db > 0, "empty vault");
+
+        // total value of HASH in terms of DRUB
+        uint256 hashValue = (hb * price) / 1e18;
+
+        // base token is the one with smaller total value
+        bool baseHash = hashValue <= db;
+
+        address base = baseHash ? HASH : drubToken;
+        address quote = baseHash ? drubToken : HASH;
+
+        uint256 baseAmt = baseHash ? hb : db;
+        uint256 quoteAmt = baseHash ? (hashValue * 1e18 / price) : (db * price / 1e18);
+
+        // make sure we don’t exceed available amounts
+        uint256 realQuote = baseHash ? db : hb;
+        if (quoteAmt > realQuote) quoteAmt = realQuote;
+
+        // token0 must be smaller address
+        (A.token0, A.token1) = base < quote ? (base, quote) : (quote, base);
+        A.amount0 = base == A.token0 ? baseAmt : quoteAmt;
+        A.amount1 = base == A.token0 ? quoteAmt : baseAmt;
+    }
+
+    function _mintPosition(Amounts memory A) internal returns (uint256 pos) {
+        (pos,,,) = INonfungiblePositionManager(POSITION_MANAGER).mint(
+            INonfungiblePositionManager.MintParams({
+                token0: A.token0,
+                token1: A.token1,
+                fee: FEE,
+                tickLower: -887220,
+                tickUpper: 887220,
+                amount0Desired: A.amount0,
+                amount1Desired: A.amount1,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(this),
+                deadline: block.timestamp + 300
+            })
+        );
+    }
+
+    // -------------------------------------------------
+    // Add liquidity
+    // -------------------------------------------------
+    function addLiquidity() external returns (uint256 positionId) {
+        uint256 price = getPrice();
+        require(price > 0, "bad price");
+
+        Amounts memory A = _computeAmounts(price);
+
+        positionId = _mintPosition(A);
+        currentPositionId = positionId;
+
+        emit LiquidityAdded(positionId, A.amount0, A.amount1);
+    }
+
+    // -------------------------------------------------
+    // Owner functions
+    // -------------------------------------------------
+    function updatePool(address newPool) external onlyOwner {
+        require(newPool != address(0), "bad pool");
+        emit PoolUpdated(poolAddress, newPool);
+        poolAddress = newPool;
+    }
+
+    function updateDrubToken(address newToken) external onlyOwner {
+        require(newToken != address(0), "bad token");
+        emit TokenUpdated(drubToken, newToken);
+        drubToken = newToken;
+        IERC20(newToken).approve(POSITION_MANAGER, type(uint256).max);
+    }
+}
