@@ -35,7 +35,7 @@ export default function RootLayout({
                 Developed by lookhook.info
               </a>
               <a
-                href="https://github.com/CoinInsider/testrub/blob/main/README.md"
+                href="https://github.com/LookHookInfo/DeRub"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:text-aave-light-blue transition-colors"

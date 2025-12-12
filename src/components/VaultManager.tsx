@@ -56,6 +56,8 @@ const VaultManager = () => {
 
   useEffect(() => {
     fetchBalances();
+    const interval = setInterval(fetchBalances, 10000); // Refresh every 10 seconds
+    return () => clearInterval(interval);
   }, [fetchBalances]);
 
   const handleAddLiquidity = async () => {
@@ -72,6 +74,20 @@ const VaultManager = () => {
       alert('Error adding liquidity. See console for details.');
     }
   };
+
+  const isButtonDisabled = isTxPending || parseFloat(drubBalance) <= 0 || parseFloat(hashBalance) <= 0;
+
+  console.log('--- VaultManager Debug ---');
+  console.log('Raw Balances:', { drubBalance, hashBalance });
+  console.log('Parsed Floats:', { drub: parseFloat(drubBalance), hash: parseFloat(hashBalance) });
+  console.log('Conditions:', {
+    isTxPending,
+    drubBalanceIsZero: parseFloat(drubBalance) <= 0,
+    hashBalanceIsZero: parseFloat(hashBalance) <= 0,
+  });
+  console.log('Is button disabled?', isButtonDisabled);
+  console.log('--------------------------');
+
 
   return (
     <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full mt-8">
@@ -96,7 +112,7 @@ const VaultManager = () => {
 
       <button 
         onClick={handleAddLiquidity} 
-        disabled={isTxPending || parseFloat(drubBalance) === 0 || parseFloat(hashBalance) === 0} 
+        disabled={isButtonDisabled} 
         className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg w-full disabled:bg-gray-600"
       >
         {isTxPending ? 'Adding Liquidity...' : 'Add Liquidity'}

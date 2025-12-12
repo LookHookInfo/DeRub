@@ -14,6 +14,7 @@ import {
   DE_RUB_CONTRACT_ADDRESS,
   DE_RUB_CONTRACT_ABI,
   HASH_TOKEN_ADDRESS,
+  DRUB_TOKEN_ADDRESS,
 } from '../app/contracts';
 import { approve, allowance } from 'thirdweb/extensions/erc20';
 
@@ -26,7 +27,7 @@ const DeRubManager = () => {
   const [debt, setDebt] = useState('0');
   const [maxDebt, setMaxDebt] = useState('0');
   const [drubPerHash, setDrubPerHash] = useState('0');
-  const [liquidationAddress, setLiquidationAddress] = useState('');
+  const [hasDebtors, setHasDebtors] = useState(false);
 
   const contract = getContract({
     client,
@@ -62,38 +63,46 @@ const DeRubManager = () => {
     params: [],
   });
 
+  const { data: debtorsLengthData, refetch: refetchDebtorsLength } = useReadContract({
+    contract,
+    method: 'debtorsLength',
+    params: [],
+  });
+
   useEffect(() => {
     if (collateralData) setCollateral(formatUnits(collateralData.toString(), 18));
     if (debtData) setDebt(formatUnits(debtData.toString(), 18));
     if (maxDebtData) setMaxDebt(formatUnits(maxDebtData.toString(), 18));
     if (drubPerHashData) setDrubPerHash(formatUnits(drubPerHashData.toString(), 18));
-  }, [collateralData, debtData, maxDebtData, drubPerHashData]);
+    if (debtorsLengthData) setHasDebtors(Number(debtorsLengthData) > 0);
+  }, [collateralData, debtData, maxDebtData, drubPerHashData, debtorsLengthData]);
 
   const refetchAll = useCallback(() => {
     refetchCollateral();
     refetchDebt();
     refetchMaxDebt();
     refetchDrubPerHash();
-  }, [refetchCollateral, refetchDebt, refetchMaxDebt, refetchDrubPerHash]);
+    refetchDebtorsLength();
+  }, [refetchCollateral, refetchDebt, refetchMaxDebt, refetchDrubPerHash, refetchDebtorsLength]);
   
   useEffect(() => {
-    refetchAll();
+    if (account) {
+      refetchAll();
+    }
   },[account, refetchAll])
 
-  const handleLiquidate = async () => {
-    if (!liquidationAddress) return;
+  const handleBatchLiquidate = async () => {
     try {
       const transaction = prepareContractCall({
         contract,
-        method: 'liquidate',
-        params: [liquidationAddress],
+        method: 'liquidateBatch',
+        params: [10], // Liquidate up to 10 users
       });
       await sendTransaction(transaction);
-      setLiquidationAddress('');
       refetchAll();
     } catch (error) {
-      console.error('Error during liquidation:', error);
-      alert('Error during liquidation. See console for details.');
+      console.error('Error during batch liquidation:', error);
+      alert('Error during batch liquidation. See console for details.');
     }
   };
 
@@ -108,7 +117,7 @@ const DeRubManager = () => {
         const hashContract = getContract({ client, address: HASH_TOKEN_ADDRESS, chain });
         const currentAllowance = await allowance({ contract: hashContract, owner: account.address, spender: DE_RUB_CONTRACT_ADDRESS });
         if (currentAllowance < parsedAmount) {
-          const approveTx = await approve({
+          const approveTx = approve({
             contract: hashContract,
             spender: DE_RUB_CONTRACT_ADDRESS,
             amount: amount,
@@ -118,10 +127,10 @@ const DeRubManager = () => {
       }
 
       if (action === 'repay') {
-        const drubContract = getContract({ client, address: DE_RUB_CONTRACT_ADDRESS, chain });
+        const drubContract = getContract({ client, address: DRUB_TOKEN_ADDRESS, chain });
         const currentAllowance = await allowance({ contract: drubContract, owner: account.address, spender: DE_RUB_CONTRACT_ADDRESS });
         if (currentAllowance < parsedAmount) {
-          const approveTx = await approve({
+          const approveTx = approve({
             contract: drubContract,
             spender: DE_RUB_CONTRACT_ADDRESS,
             amount: amount,
@@ -194,7 +203,7 @@ const DeRubManager = () => {
           style={{ width: `${Math.min(healthFactor, 100)}%` }}
         ></div>
       </div>
-      <div className="text-white text-sm text-center mb-4">Liquidation at &gt;80% ({healthFactor.toFixed(2)}%)</div>
+      <div className="text-white text-sm text-center mb-4">Liquidation at &gt;100% ({healthFactor.toFixed(2)}%)</div>
 
       <div className="flex items-center space-x-4 mb-4">
         <input
@@ -219,26 +228,18 @@ const DeRubManager = () => {
       </div>
 
       <div className="mt-8 border-t border-gray-700 pt-6">
-        <h3 className="text-xl font-bold text-white mb-4">Manual Liquidation</h3>
+        <h3 className="text-xl font-bold text-white mb-4">Liquidation</h3>
         <p className="text-gray-400 mb-4">
-          Enter the address of a user whose health factor is below 100% to liquidate their position. This will seize their collateral and repay their debt.
+          Run a batch liquidation to check and liquidate up to 10 of the most risky positions. 
+          This button is active if there are any borrowers in the system.
         </p>
-        <div className="flex items-center space-x-4">
-          <input
-            type="text"
-            value={liquidationAddress}
-            onChange={(e) => setLiquidationAddress(e.target.value)}
-            placeholder="Enter address to liquidate"
-            className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-          />
-          <button 
-            onClick={handleLiquidate} 
-            disabled={isTxPending || !liquidationAddress} 
-            className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600"
+        <button 
+            onClick={handleBatchLiquidate} 
+            disabled={isTxPending || !hasDebtors} 
+            className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600 w-full"
           >
-            {isTxPending ? 'Liquidating...' : 'Liquidate'}
+            {isTxPending ? 'Liquidating...' : 'Liquidate Batch (up to 10)'}
           </button>
-        </div>
       </div>
     </div>
   );
