@@ -5,7 +5,6 @@ import Image from 'next/image';
 import { client } from '../app/client';
 import { chain } from '../app/chain';
 import DeRubManager from '@/components/DeRubManager';
-import VaultManager from '@/components/VaultManager';
 
 export default function Home() {
   return (
@@ -30,8 +29,6 @@ export default function Home() {
         </div>
 
         <DeRubManager />
-        <VaultManager />
-
       </div>
     </main>
   );
