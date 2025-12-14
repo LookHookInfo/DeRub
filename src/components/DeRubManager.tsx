@@ -8,8 +8,7 @@ import {
 } from 'thirdweb/react';
 import { getContract, prepareContractCall } from 'thirdweb';
 import { parseUnits, formatUnits } from 'ethers';
-import { client } from '../app/client';
-import { chain } from '../app/chain';
+import { client, chain } from '../app/config';
 import {
   DE_RUB_CONTRACT_ADDRESS,
   DE_RUB_CONTRACT_ABI,

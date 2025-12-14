@@ -2,8 +2,7 @@
 
 import { ConnectButton } from 'thirdweb/react';
 import Image from 'next/image';
-import { client } from '../app/client';
-import { chain } from '../app/chain';
+import { client, chain } from '../app/config';
 import DeRubManager from '@/components/DeRubManager';
 
 export default function Home() {
