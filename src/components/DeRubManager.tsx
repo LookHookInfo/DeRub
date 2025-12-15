@@ -1,121 +1,53 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import {
   useActiveAccount,
-  useReadContract,
   useSendAndConfirmTransaction,
 } from 'thirdweb/react';
-import { getContract, prepareContractCall } from 'thirdweb';
-import { parseUnits, formatUnits } from 'ethers';
-import { client, chain } from '../app/config';
+import { prepareContractCall } from 'thirdweb';
+import { parseUnits } from 'ethers';
+import { approve, allowance } from 'thirdweb/extensions/erc20';
+import { useDeRubData } from '../hooks/useDeRubData';
 import {
   DE_RUB_CONTRACT_ADDRESS,
-  DE_RUB_CONTRACT_ABI,
-  HASH_TOKEN_ADDRESS,
-  DRUB_TOKEN_ADDRESS,
   VAULT_CONTRACT_ADDRESS,
   VAULT_CONTRACT_ABI,
 } from '../app/contracts';
-import { approve, allowance, balanceOf } from 'thirdweb/extensions/erc20';
+import { client, chain } from '../app/config';
+import { getContract } from 'thirdweb';
 
 const DeRubManager = () => {
   const account = useActiveAccount();
   const { mutate: sendAndConfirmTx, isPending: isTxPending } = useSendAndConfirmTransaction();
 
   const [amount, setAmount] = useState('');
-  const [collateral, setCollateral] = useState('0');
-  const [debt, setDebt] = useState('0');
-  const [maxDebt, setMaxDebt] = useState('0');
-  const [drubPerHash, setDrubPerHash] = useState('0');
-  const [hasDebtors, setHasDebtors] = useState(false);
-  const [drubBalance, setDrubBalance] = useState('0');
-  const [hashBalance, setHashBalance] = useState('0');
 
-  // --- Contract Setups ---
-  const contract = getContract({ client, address: DE_RUB_CONTRACT_ADDRESS, chain, abi: DE_RUB_CONTRACT_ABI });
+  const {
+    collateral,
+    debt,
+    maxDebt,
+    drubPerHash,
+    hasDebtors,
+    drubBalance,
+    hashBalance,
+    refetchAllUserData,
+    refetchSystemData,
+    deRubContract,
+    drubTokenContract,
+    hashTokenContract,
+  } = useDeRubData();
+
+  // We still need a vault contract instance here for the `addLiquidity` action
   const vaultContract = getContract({ client, address: VAULT_CONTRACT_ADDRESS, chain, abi: VAULT_CONTRACT_ABI });
-  const drubContract = getContract({ client, address: DRUB_TOKEN_ADDRESS, chain, abi: DE_RUB_CONTRACT_ABI });
-  const hashContract = getContract({ client, address: HASH_TOKEN_ADDRESS, chain, abi: DE_RUB_CONTRACT_ABI });
-
-  // --- Data Hooks ---
-  const { data: collateralData, refetch: refetchCollateral } = useReadContract({
-    contract,
-    method: 'collateral',
-    params: [account?.address || ''],
-    queryOptions: { enabled: !!account },
-  });
-
-  const { data: debtData, refetch: refetchDebt } = useReadContract({
-    contract,
-    method: 'debt',
-    params: [account?.address || ''],
-    queryOptions: { enabled: !!account },
-  });
-
-  const { data: maxDebtData, refetch: refetchMaxDebt } = useReadContract({
-    contract,
-    method: 'maxDebt',
-    params: [account?.address || ''],
-    queryOptions: { enabled: !!account },
-  });
-
-  const { data: drubPerHashData, refetch: refetchDrubPerHash } = useReadContract({
-    contract,
-    method: 'getDrubPerHash',
-    params: [],
-  });
-
-  const { data: debtorsLengthData, refetch: refetchDebtorsLength } = useReadContract({
-    contract,
-    method: 'debtorsLength',
-    params: [],
-  });
-
-  // --- Data Formatting & State Setting ---
-  useEffect(() => {
-    if (collateralData) setCollateral(formatUnits(collateralData, 18));
-    if (debtData) setDebt(formatUnits(debtData, 18));
-    if (maxDebtData) setMaxDebt(formatUnits(maxDebtData, 18));
-    if (drubPerHashData) setDrubPerHash(formatUnits(drubPerHashData, 18));
-    if (debtorsLengthData) setHasDebtors(Number(debtorsLengthData) > 0);
-  }, [collateralData, debtData, maxDebtData, drubPerHashData, debtorsLengthData]);
-
-
-  // --- Balance & Refetch Logic ---
-  const fetchBalances = useCallback(async () => {
-    try {
-      const drubBal = await balanceOf({ contract: drubContract, address: VAULT_CONTRACT_ADDRESS });
-      const hashBal = await balanceOf({ contract: hashContract, address: VAULT_CONTRACT_ADDRESS });
-      setDrubBalance(formatUnits(drubBal, 18));
-      setHashBalance(formatUnits(hashBal, 18));
-    } catch (error) {
-      console.error("Error fetching vault balances:", error);
-    }
-  }, [drubContract, hashContract]);
-
-  const refetchAll = useCallback(() => {
-    refetchCollateral();
-    refetchDebt();
-    refetchMaxDebt();
-    refetchDrubPerHash();
-    refetchDebtorsLength();
-    fetchBalances();
-  }, [refetchCollateral, refetchDebt, refetchMaxDebt, refetchDrubPerHash, refetchDebtorsLength, fetchBalances]);
-
-  useEffect(() => {
-    if (account) {
-      refetchAll();
-    }
-  }, [account, refetchAll]);
-
 
   // --- Transaction Handlers ---
   const handleBatchLiquidate = async () => {
     try {
-      const transaction = prepareContractCall({ contract, method: 'liquidateBatch', params: [10n] });
+      const transaction = prepareContractCall({ contract: deRubContract, method: 'liquidateBatch', params: [10n] });
       await sendAndConfirmTx(transaction);
-      refetchAll();
+      refetchSystemData(); // Affects system state
+      refetchAllUserData(); // Affects multiple users
     } catch (error) {
       console.error('Error during batch liquidation:', error);
       alert('Error during batch liquidation. See console for details.');
@@ -126,7 +58,7 @@ const DeRubManager = () => {
     try {
       const transaction = prepareContractCall({ contract: vaultContract, method: 'addLiquidity', params: [] });
       await sendAndConfirmTx(transaction);
-      refetchAll();
+      refetchSystemData(); // Affects vault balances
     } catch (error) {
       console.error('Error adding liquidity:', error);
       alert('Error adding liquidity. See console for details.');
@@ -141,28 +73,28 @@ const DeRubManager = () => {
       let mainTransaction;
 
       if (action === 'deposit' || action === 'buy') {
-        const currentAllowance = await allowance({ contract: hashContract, owner: account.address, spender: DE_RUB_CONTRACT_ADDRESS });
+        const currentAllowance = await allowance({ contract: hashTokenContract, owner: account.address, spender: DE_RUB_CONTRACT_ADDRESS });
         if (currentAllowance < parsedAmount) {
-          const approveTx = approve({ contract: hashContract, spender: DE_RUB_CONTRACT_ADDRESS, amount: amount });
+          const approveTx = approve({ contract: hashTokenContract, spender: DE_RUB_CONTRACT_ADDRESS, amount: amount });
           await sendAndConfirmTx(approveTx);
         }
         mainTransaction = prepareContractCall({
-            contract,
+            contract: deRubContract,
             method: action === 'deposit' ? 'depositCollateral' : 'buyDRUB',
             params: [parsedAmount],
         });
       } 
       else if (action === 'repay') {
-        const currentAllowance = await allowance({ contract: drubContract, owner: account.address, spender: DE_RUB_CONTRACT_ADDRESS });
+        const currentAllowance = await allowance({ contract: drubTokenContract, owner: account.address, spender: DE_RUB_CONTRACT_ADDRESS });
         if (currentAllowance < parsedAmount) {
-            const approveTx = approve({ contract: drubContract, spender: DE_RUB_CONTRACT_ADDRESS, amount: amount });
+            const approveTx = approve({ contract: drubTokenContract, spender: DE_RUB_CONTRACT_ADDRESS, amount: amount });
             await sendAndConfirmTx(approveTx);
         }
-        mainTransaction = prepareContractCall({ contract, method: 'repay', params: [parsedAmount] });
+        mainTransaction = prepareContractCall({ contract: deRubContract, method: 'repay', params: [parsedAmount] });
       }
       else if (action === 'withdraw' || action === 'borrow') {
         mainTransaction = prepareContractCall({
-            contract,
+            contract: deRubContract,
             method: action === 'withdraw' ? 'withdrawCollateral' : 'borrowDRUB',
             params: [parsedAmount],
         });
@@ -173,7 +105,14 @@ const DeRubManager = () => {
       }
       
       setAmount('');
-      refetchAll();
+      // Selective refetching
+      if (action === 'deposit' || action === 'withdraw' || action === 'borrow' || action === 'repay') {
+        refetchAllUserData(); // These actions affect the user's main data points
+      }
+      if (action === 'buy' || action === 'repay') {
+        refetchSystemData(); // These actions can affect vault balances or system-wide data
+      }
+
     } catch (error) {
       console.error(`Error during ${action}:`, error);
       alert(`Error during ${action}. See console for details.`);

@@ -21,7 +21,7 @@ export default function Home() {
             />{' '}
             Dashboard
             <span className="bg-indigo-500 text-white text-sm font-bold px-3 py-1 rounded-lg ml-4 align-middle">
-              v2
+              v2 MVP test
             </span>
           </h1>
           <ConnectButton client={client} chain={chain} />
