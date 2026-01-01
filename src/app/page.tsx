@@ -7,7 +7,7 @@ import DeRubManager from '@/components/DeRubManager';
 
 export default function Home() {
   return (
-    <main className="min-h-screen p-8 text-aave-text-light">
+    <main className="min-h-screen p-8 text-aave-text-light bg-gray-900">
       <div className="max-w-4xl mx-auto">
         <div className="flex flex-col md:flex-row items-center justify-between mb-8">
           <h1 className="text-4xl font-bold text-white mb-4 md:mb-0">
@@ -15,13 +15,13 @@ export default function Home() {
             <Image
               src="/RUB.png"
               alt="RUB Logo"
-              width={80}
-              height={80}
+              width={60}
+              height={60}
               className="inline-block align-middle"
             />{' '}
             Dashboard
             <span className="bg-indigo-500 text-white text-sm font-bold px-3 py-1 rounded-lg ml-4 align-middle">
-              v2 MVP test
+              v3
             </span>
           </h1>
           <ConnectButton client={client} chain={chain} />

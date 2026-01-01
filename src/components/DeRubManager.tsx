@@ -5,191 +5,198 @@ import {
   useActiveAccount,
   useSendAndConfirmTransaction,
 } from 'thirdweb/react';
-import { prepareContractCall } from 'thirdweb';
-import { parseUnits } from 'ethers';
+import { prepareContractCall, toWei } from 'thirdweb';
 import { approve, allowance } from 'thirdweb/extensions/erc20';
-import { useDeRubData } from '../hooks/useDeRubData';
 import {
-  DE_RUB_CONTRACT_ADDRESS,
-  VAULT_CONTRACT_ADDRESS,
-  VAULT_CONTRACT_ABI,
-} from '../app/contracts';
-import { client, chain } from '../app/config';
-import { getContract } from 'thirdweb';
+  useDeRubData,
+  deRubContract,
+  vaultContract,
+  hashTokenContract,
+} from '../hooks/useDeRubData';
+import { DE_RUB_CONTRACT_ADDRESS } from '../app/contracts';
 
 const DeRubManager = () => {
   const account = useActiveAccount();
   const { mutate: sendAndConfirmTx, isPending: isTxPending } = useSendAndConfirmTransaction();
 
-  const [amount, setAmount] = useState('');
+  const [buyAmount, setBuyAmount] = useState('');
 
   const {
-    collateral,
-    debt,
-    maxDebt,
     drubPerHash,
-    hasDebtors,
-    drubBalance,
-    hashBalance,
-    refetchAllUserData,
-    refetchSystemData,
-    deRubContract,
-    drubTokenContract,
-    hashTokenContract,
+    rubPerUsd,
+    usdPerHash,
+    userHashBalance,
+    userDrubBalance,
+    vaultHashBalance,
+    vaultDrubBalance,
+    hasLPPositions, // New: from useDeRubData hook
+    refetchAll,
   } = useDeRubData();
 
-  // We still need a vault contract instance here for the `addLiquidity` action
-  const vaultContract = getContract({ client, address: VAULT_CONTRACT_ADDRESS, chain, abi: VAULT_CONTRACT_ABI });
-
   // --- Transaction Handlers ---
-  const handleBatchLiquidate = async () => {
+
+  const handleBuy = async () => {
+    if (!account || !buyAmount || parseFloat(buyAmount) <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+    const amountWei = toWei(buyAmount);
+
     try {
-      const transaction = prepareContractCall({ contract: deRubContract, method: 'liquidateBatch', params: [10n] });
+      // 1. Check allowance
+      const currentAllowance = await allowance({ 
+        contract: hashTokenContract, 
+        owner: account.address, 
+        spender: DE_RUB_CONTRACT_ADDRESS 
+      });
+      
+      // 2. Approve if necessary
+      if (currentAllowance < amountWei) {
+        const approveTx = approve({ 
+          contract: hashTokenContract, 
+          spender: DE_RUB_CONTRACT_ADDRESS, 
+          amount: buyAmount 
+        });
+        await sendAndConfirmTx(approveTx);
+        // It's good practice to alert the user or have the UI reflect this step
+        alert('Approval successful. You can now proceed with the purchase.');
+      }
+
+      // 3. Prepare and send the main transaction
+      const transaction = prepareContractCall({ 
+        contract: deRubContract, 
+        method: 'buyDRUB', 
+        params: [amountWei] 
+      });
       await sendAndConfirmTx(transaction);
-      refetchSystemData(); // Affects system state
-      refetchAllUserData(); // Affects multiple users
+
+      alert('Purchase successful!');
+      setBuyAmount('');
+      refetchAll();
+
     } catch (error) {
-      console.error('Error during batch liquidation:', error);
-      alert('Error during batch liquidation. See console for details.');
+      console.error('Error during purchase:', error);
+      alert('Error during purchase. See console for details.');
     }
   };
 
   const handleAddLiquidity = async () => {
+    if (!account) return;
     try {
       const transaction = prepareContractCall({ contract: vaultContract, method: 'addLiquidity', params: [] });
       await sendAndConfirmTx(transaction);
-      refetchSystemData(); // Affects vault balances
+      alert('Liquidity added successfully!');
+      refetchAll();
     } catch (error) {
       console.error('Error adding liquidity:', error);
       alert('Error adding liquidity. See console for details.');
     }
   };
-
-  const handleAction = async (action: 'deposit' | 'withdraw' | 'borrow' | 'repay' | 'buy') => {
-    if (!account || !amount) return;
-    const parsedAmount = parseUnits(amount, 18);
   
+  const handleBurnPositions = async () => {
+    if (!account) return;
+    if (!confirm('WARNING: This is an irreversible action. You will burn all LP tokens in the vault, permanently locking the liquidity. Are you sure you want to proceed?')) {
+        return;
+    }
     try {
-      let mainTransaction;
-
-      if (action === 'deposit' || action === 'buy') {
-        const currentAllowance = await allowance({ contract: hashTokenContract, owner: account.address, spender: DE_RUB_CONTRACT_ADDRESS });
-        if (currentAllowance < parsedAmount) {
-          const approveTx = approve({ contract: hashTokenContract, spender: DE_RUB_CONTRACT_ADDRESS, amount: amount });
-          await sendAndConfirmTx(approveTx);
-        }
-        mainTransaction = prepareContractCall({
-            contract: deRubContract,
-            method: action === 'deposit' ? 'depositCollateral' : 'buyDRUB',
-            params: [parsedAmount],
-        });
-      } 
-      else if (action === 'repay') {
-        const currentAllowance = await allowance({ contract: drubTokenContract, owner: account.address, spender: DE_RUB_CONTRACT_ADDRESS });
-        if (currentAllowance < parsedAmount) {
-            const approveTx = approve({ contract: drubTokenContract, spender: DE_RUB_CONTRACT_ADDRESS, amount: amount });
-            await sendAndConfirmTx(approveTx);
-        }
-        mainTransaction = prepareContractCall({ contract: deRubContract, method: 'repay', params: [parsedAmount] });
-      }
-      else if (action === 'withdraw' || action === 'borrow') {
-        mainTransaction = prepareContractCall({
-            contract: deRubContract,
-            method: action === 'withdraw' ? 'withdrawCollateral' : 'borrowDRUB',
-            params: [parsedAmount],
-        });
-      }
-
-      if (mainTransaction) {
-        await sendAndConfirmTx(mainTransaction);
-      }
-      
-      setAmount('');
-      // Selective refetching
-      if (action === 'deposit' || action === 'withdraw' || action === 'borrow' || action === 'repay') {
-        refetchAllUserData(); // These actions affect the user's main data points
-      }
-      if (action === 'buy' || action === 'repay') {
-        refetchSystemData(); // These actions can affect vault balances or system-wide data
-      }
-
+      const transaction = prepareContractCall({ contract: vaultContract, method: 'burnAllPositions', params: [] });
+      await sendAndConfirmTx(transaction);
+      alert('All positions burned successfully!');
+      refetchAll();
     } catch (error) {
-      console.error(`Error during ${action}:`, error);
-      alert(`Error during ${action}. See console for details.`);
+      console.error('Error burning positions:', error);
+      alert('Error burning positions. See console for details.');
     }
   };
 
+
   // --- UI Computed Values ---
-  const healthFactor = parseFloat(maxDebt) > 0 ? (parseFloat(debt) / parseFloat(maxDebt)) * 100 : 0;
-  const isAddLiquidityDisabled = isTxPending || parseFloat(drubBalance) <= 0 || parseFloat(hashBalance) <= 0;
+  const isBuyButtonDisabled = isTxPending || !buyAmount || parseFloat(buyAmount) <= 0 || parseFloat(buyAmount) > parseFloat(userHashBalance);
+  const isAddLiquidityDisabled = isTxPending || parseFloat(vaultDrubBalance) <= 0 || parseFloat(vaultHashBalance) <= 0;
+  const isBurnPositionsDisabled = isTxPending || !hasLPPositions; // Use hasLPPositions
+
 
   return (
-    <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-white">DeRub Manager</h2>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-white">
-        <div>Collateral (HASH): {parseFloat(collateral).toFixed(4)}</div>
-        <div>Debt (DRUB): {parseFloat(debt).toFixed(4)}</div>
-        <div>Max Debt (DRUB): {parseFloat(maxDebt).toFixed(4)}</div>
+    <div className="space-y-8">
+      {/* ----------- Buy DRUB Panel ----------- */}
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full">
+        <h2 className="text-2xl font-bold text-white mb-4">Buy DRUB with HASH</h2>
+        
+        <div className="grid grid-cols-2 gap-4 mb-4 text-sm text-gray-300">
+            <div>Your HASH Balance: {parseFloat(userHashBalance).toFixed(4)}</div>
+            <div>Your DRUB Balance: {parseFloat(userDrubBalance).toFixed(4)}</div>
+        </div>
+
+        <div className="flex items-center space-x-4 mb-4">
+          <input
+            type="number"
+            value={buyAmount}
+            onChange={(e) => setBuyAmount(e.target.value)}
+            placeholder="Enter HASH amount"
+            className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button 
+            onClick={handleBuy} 
+            disabled={isBuyButtonDisabled} 
+            className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg disabled:bg-gray-600 disabled:cursor-not-allowed"
+          >
+            {isTxPending ? 'Working...' : 'Buy DRUB'}
+          </button>
+        </div>
+        {parseFloat(buyAmount) > parseFloat(userHashBalance) && (
+            <p className="text-red-500 text-sm mt-2">Insufficient HASH balance.</p>
+        )}
       </div>
 
-      <div className="w-full bg-gray-700 rounded-full h-2.5 mb-4">
-        <div 
-          className="bg-red-600 h-2.5 rounded-full" 
-          style={{ width: `${Math.min(healthFactor, 100)}%` }}
-        ></div>
-      </div>
-      <div className="text-white text-sm text-center mb-4">Liquidation at &gt;100% ({healthFactor.toFixed(2)}%)</div>
 
-      <div className="flex items-center space-x-4 mb-4">
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="Enter amount"
-          className="w-full px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <button onClick={() => handleAction('deposit')} disabled={isTxPending} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600">Deposit HASH</button>
-        <button onClick={() => handleAction('withdraw')} disabled={isTxPending} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600">Withdraw HASH</button>
-        <button onClick={() => handleAction('borrow')} disabled={isTxPending} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600">Borrow DRUB</button>
-        <button onClick={() => handleAction('repay')} disabled={isTxPending} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600">Repay DRUB</button>
-        <button onClick={() => handleAction('buy')} disabled={isTxPending} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600">Buy DRUB with HASH</button>
+      {/* ----------- Info Panel ----------- */}
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full">
+         <h2 className="text-2xl font-bold text-white mb-4">Market Info</h2>
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-white text-center">
+            <div className="bg-gray-700 p-4 rounded-lg">
+                <div className="text-sm text-gray-400">DRUB per HASH</div>
+                <div className="text-xl font-bold">{parseFloat(drubPerHash).toFixed(4)}</div>
+            </div>
+            <div className="bg-gray-700 p-4 rounded-lg">
+                <div className="text-sm text-gray-400">USD per HASH</div>
+                <div className="text-xl font-bold">${parseFloat(usdPerHash).toFixed(4)}</div>
+            </div>
+             <div className="bg-gray-700 p-4 rounded-lg">
+                <div className="text-sm text-gray-400">RUB per USD (Oracle)</div>
+                <div className="text-xl font-bold">₽{parseFloat(rubPerUsd).toFixed(2)}</div>
+            </div>
+         </div>
       </div>
 
-      <div className="mt-4 text-white">
-        1 HASH ≈ {parseFloat(drubPerHash).toFixed(4)} DRUB
-      </div>
 
-      <div className="mt-8 border-t border-gray-700 pt-6">
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-white">Treasury Vault</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-4 text-white text-sm">
-            <div>DRUB: {drubBalance}</div>
-            <div>HASH: {hashBalance}</div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* ----------- Treasury Panel ----------- */}
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full">
+        <h2 className="text-2xl font-bold text-white mb-4">Treasury Vault</h2>
+        <div className="grid grid-cols-2 gap-4 mb-4 text-white">
+            <div className="bg-gray-700 p-4 rounded-lg">
+                <div className="text-sm text-gray-400">Vault HASH Balance</div>
+                <div className="text-lg">{parseFloat(vaultHashBalance).toFixed(4)}</div>
+            </div>
+            <div className="bg-gray-700 p-4 rounded-lg">
+                <div className="text-sm text-gray-400">Vault DRUB Balance</div>
+                <div className="text-lg">{parseFloat(vaultDrubBalance).toFixed(4)}</div>
+            </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
             <button
               onClick={handleAddLiquidity}
               disabled={isAddLiquidityDisabled}
-              className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg w-full disabled:bg-gray-600"
+              className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded-lg w-full disabled:bg-gray-600 disabled:cursor-not-allowed"
             >
-              {isTxPending ? 'Working...' : 'Add Liquidity'}
+              {isTxPending ? 'Working...' : 'Add Liquidity to Pool'}
             </button>
             <button
-              onClick={handleBatchLiquidate}
-              disabled={isTxPending || !hasDebtors}
-              className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600 w-full"
+              onClick={handleBurnPositions}
+              disabled={isTxPending}
+              className="bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600 w-full"
             >
-              {isTxPending ? 'Working...' : 'Liquidate Batch'}
+              {isTxPending ? 'Working...' : 'Burn All LP Tokens'}
             </button>
-          </div>
         </div>
       </div>
     </div>

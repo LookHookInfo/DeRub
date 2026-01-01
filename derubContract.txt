@@ -1,69 +1,169 @@
-0x4983F5B7c774cec0E7dDEE1f6Df61B773C335560
+контракт 0x1339c3a22ccdd7560B4Ccacd065Cd4b578BDA12d
 
+// SPDX-License-Identifier: MIT
+
+/**
+* DRUB can be purchased using Hashcoin
+* An equivalent amount of DRUB is sent to the treasury
+* These funds are added to the liquidity pool (LP) and locked
+* Full decentralization is achieved once contract ownership is renounced
+ */
+
+pragma solidity ^0.8.30;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
+interface IUniswapV3Pool {
+    function slot0() external view returns (
+        uint160 sqrtPriceX96,
+        int24,
+        uint16,
+        uint16,
+        uint16,
+        uint8,
+        bool
+    );
+
+    function liquidity() external view returns (uint128);
+}
+
+contract DeRub is ERC20 {
+    using SafeERC20 for IERC20;
+
+    // ================= IMMUTABLE =================
+    address public immutable HASH;
+    address public immutable HASH_USDC_POOL;
+
+    // ================= STATE =================
+    address public treasury;
+    address public owner;
+    address public priceProvider;
+
+    // ===== FIAT PRICE =====
+    uint256 public rubPerUsd;       // RUB per USD (1e18)
+    uint256 public lastRubUpdate;
+
+    // ================= EVENTS =================
+    event RubPriceUpdated(uint256 rubPerUsd, uint256 timestamp);
+    event PriceProviderChanged(address provider);
+    event TreasuryChanged(address treasury);
+
+    // ================= CONSTRUCTOR =================
+    constructor(
+        address _hash,
+        address _hashUsdcPool,
+        address _treasury,
+        address _priceProvider
+    ) ERC20("De Ruble", "DRUB") {
+        require(_hash != address(0), "ZERO_HASH");
+        require(_hashUsdcPool != address(0), "ZERO_POOL");
+        require(_treasury != address(0), "ZERO_TREASURY");
+        require(_priceProvider != address(0), "ZERO_PROVIDER");
+
+        require(IERC20Metadata(_hash).decimals() == 18, "HASH_DECIMALS_NOT_18");
+
+        HASH = _hash;
+        HASH_USDC_POOL = _hashUsdcPool;
+        treasury = _treasury;
+        priceProvider = _priceProvider;
+        owner = msg.sender;
+    }
+
+    // ================= MODIFIERS =================
+    modifier onlyOwner() {
+        require(msg.sender == owner, "NOT_OWNER");
+        _;
+    }
+
+    modifier onlyPriceProvider() {
+        require(msg.sender == priceProvider, "NOT_PROVIDER");
+        _;
+    }
+
+    // ================= ADMIN =================
+    function setTreasury(address newTreasury) external onlyOwner {
+        require(newTreasury != address(0), "ZERO_TREASURY");
+        treasury = newTreasury;
+        emit TreasuryChanged(newTreasury);
+    }
+
+    function setPriceProvider(address newProvider) external onlyOwner {
+        require(newProvider != address(0), "ZERO_PROVIDER");
+        priceProvider = newProvider;
+        emit PriceProviderChanged(newProvider);
+    }
+
+    function renounceOwnership() external onlyOwner {
+        owner = address(0);
+    }
+
+    // ================= ORACLE (FIAT) =================
+    /// @notice RUB per USD (1e18)
+    function setRubPerUsd(uint256 newPrice) external onlyPriceProvider {
+        require(newPrice > 0, "PRICE_ZERO");
+        rubPerUsd = newPrice;
+        lastRubUpdate = block.timestamp;
+        emit RubPriceUpdated(newPrice, block.timestamp);
+    }
+
+    // ================= UNISWAP V3 =================
+    /// @notice USD per HASH from Uniswap V3 (1e18)
+    function getUsdPerHash() public view returns (uint256) {
+        IUniswapV3Pool pool = IUniswapV3Pool(HASH_USDC_POOL);
+
+        require(pool.liquidity() > 0, "NO_LIQ");
+
+        (uint160 sqrtPriceX96,,,,,,) = pool.slot0();
+
+        // price = HASH / USDC (Q96)
+        uint256 priceX96 =
+            (uint256(sqrtPriceX96) * uint256(sqrtPriceX96)) >> 192;
+
+        require(priceX96 > 0, "BAD_PRICE");
+
+        // 1e30 = 1e18 (target) + 1e6 (USDC decimals)
+        return (1e30) / priceX96;
+    }
+
+    // ================= VIEW =================
+    /// @notice DRUB per HASH (1e18)
+    function getDrubPerHash() public view returns (uint256) {
+        require(rubPerUsd > 0, "NO_RUB_PRICE");
+
+        uint256 usdPerHash = getUsdPerHash();
+
+        // (RUB / USD) * (USD / HASH) = RUB / HASH
+        return (rubPerUsd * usdPerHash) / 1e18;
+    }
+
+    function _hashToDrub(uint256 hashAmount) internal view returns (uint256) {
+        uint256 price = getDrubPerHash();
+        return (hashAmount * price) / 1e18;
+    }
+
+    // ================= CORE =================
+    function buyDRUB(uint256 hashAmount) external {
+        require(hashAmount > 0, "ZERO_AMOUNT");
+
+        uint256 drubAmount = _hashToDrub(hashAmount);
+        require(drubAmount > 0, "ZERO_DRUB");
+
+        // 1. HASH → treasury
+        IERC20(HASH).safeTransferFrom(msg.sender, treasury, hashAmount);
+
+        // 2. DRUB → user
+        _mint(msg.sender, drubAmount);
+
+        // 3. DRUB → treasury
+        _mint(treasury, drubAmount);
+    }
+}
+
+
+_________________________________________________________________________________________________________________
 [
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "spender",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "value",
-				"type": "uint256"
-			}
-		],
-		"name": "approve",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "borrowDRUB",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "hashAmount",
-				"type": "uint256"
-			}
-		],
-		"name": "buyDRUB",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "depositCollateral",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
 	{
 		"inputs": [
 			{
@@ -73,12 +173,17 @@
 			},
 			{
 				"internalType": "address",
+				"name": "_hashUsdcPool",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
 				"name": "_treasury",
 				"type": "address"
 			},
 			{
 				"internalType": "address",
-				"name": "_pool",
+				"name": "_priceProvider",
 				"type": "address"
 			}
 		],
@@ -175,19 +280,6 @@
 		"inputs": [
 			{
 				"internalType": "address",
-				"name": "user",
-				"type": "address"
-			}
-		],
-		"name": "liquidate",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
 				"name": "token",
 				"type": "address"
 			}
@@ -221,87 +313,36 @@
 		"type": "event"
 	},
 	{
+		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "provider",
+				"type": "address"
+			}
+		],
+		"name": "PriceProviderChanged",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
 				"internalType": "uint256",
-				"name": "maxCount",
+				"name": "rubPerUsd",
 				"type": "uint256"
-			}
-		],
-		"name": "liquidateBatch",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "renounceOwnership",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
-			}
-		],
-		"name": "repay",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "newPool",
-				"type": "address"
-			}
-		],
-		"name": "setPool",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "newTreasury",
-				"type": "address"
-			}
-		],
-		"name": "setTreasury",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "to",
-				"type": "address"
 			},
 			{
+				"indexed": false,
 				"internalType": "uint256",
-				"name": "value",
+				"name": "timestamp",
 				"type": "uint256"
 			}
 		],
-		"name": "transfer",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "nonpayable",
-		"type": "function"
+		"name": "RubPriceUpdated",
+		"type": "event"
 	},
 	{
 		"anonymous": false,
@@ -329,45 +370,42 @@
 		"type": "event"
 	},
 	{
+		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": false,
 				"internalType": "address",
-				"name": "from",
+				"name": "treasury",
 				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "to",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "value",
-				"type": "uint256"
 			}
 		],
-		"name": "transferFrom",
+		"name": "TreasuryChanged",
+		"type": "event"
+	},
+	{
+		"inputs": [],
+		"name": "HASH",
 		"outputs": [
 			{
-				"internalType": "bool",
+				"internalType": "address",
 				"name": "",
-				"type": "bool"
+				"type": "address"
 			}
 		],
-		"stateMutability": "nonpayable",
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
-		"inputs": [
+		"inputs": [],
+		"name": "HASH_USDC_POOL",
+		"outputs": [
 			{
-				"internalType": "uint256",
-				"name": "amount",
-				"type": "uint256"
+				"internalType": "address",
+				"name": "",
+				"type": "address"
 			}
 		],
-		"name": "withdrawCollateral",
-		"outputs": [],
-		"stateMutability": "nonpayable",
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
@@ -398,6 +436,30 @@
 		"inputs": [
 			{
 				"internalType": "address",
+				"name": "spender",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "value",
+				"type": "uint256"
+			}
+		],
+		"name": "approve",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
 				"name": "account",
 				"type": "address"
 			}
@@ -416,103 +478,14 @@
 	{
 		"inputs": [
 			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "collateral",
-		"outputs": [
-			{
 				"internalType": "uint256",
-				"name": "",
+				"name": "hashAmount",
 				"type": "uint256"
 			}
 		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "COLLATERAL_FACTOR",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "debt",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "debtorIndex",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"name": "debtors",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "debtorsLength",
-		"outputs": [
-			{
-				"internalType": "uint256",
-				"name": "",
-				"type": "uint256"
-			}
-		],
-		"stateMutability": "view",
+		"name": "buyDRUB",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
@@ -529,55 +502,12 @@
 		"type": "function"
 	},
 	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "index",
-				"type": "uint256"
-			}
-		],
-		"name": "getDebtor",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "start",
-				"type": "uint256"
-			},
-			{
-				"internalType": "uint256",
-				"name": "count",
-				"type": "uint256"
-			}
-		],
-		"name": "getDebtors",
-		"outputs": [
-			{
-				"internalType": "address[]",
-				"name": "list",
-				"type": "address[]"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
 		"inputs": [],
 		"name": "getDrubPerHash",
 		"outputs": [
 			{
 				"internalType": "uint256",
-				"name": "drubPerHashScaled",
+				"name": "",
 				"type": "uint256"
 			}
 		],
@@ -586,11 +516,11 @@
 	},
 	{
 		"inputs": [],
-		"name": "getHashPerDrubScaled",
+		"name": "getUsdPerHash",
 		"outputs": [
 			{
 				"internalType": "uint256",
-				"name": "priceScaled",
+				"name": "",
 				"type": "uint256"
 			}
 		],
@@ -599,58 +529,7 @@
 	},
 	{
 		"inputs": [],
-		"name": "HASH",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "HASH_DECIMALS",
-		"outputs": [
-			{
-				"internalType": "uint8",
-				"name": "",
-				"type": "uint8"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"name": "inDebtors",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "u",
-				"type": "address"
-			}
-		],
-		"name": "maxDebt",
+		"name": "lastRubUpdate",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -689,7 +568,7 @@
 	},
 	{
 		"inputs": [],
-		"name": "pool",
+		"name": "priceProvider",
 		"outputs": [
 			{
 				"internalType": "address",
@@ -698,6 +577,65 @@
 			}
 		],
 		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "renounceOwnership",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "rubPerUsd",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "newProvider",
+				"type": "address"
+			}
+		],
+		"name": "setPriceProvider",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "newPrice",
+				"type": "uint256"
+			}
+		],
+		"name": "setRubPerUsd",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "newTreasury",
+				"type": "address"
+			}
+		],
+		"name": "setTreasury",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
@@ -727,6 +665,59 @@
 		"type": "function"
 	},
 	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "to",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "value",
+				"type": "uint256"
+			}
+		],
+		"name": "transfer",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "from",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "to",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "value",
+				"type": "uint256"
+			}
+		],
+		"name": "transferFrom",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
 		"inputs": [],
 		"name": "treasury",
 		"outputs": [
@@ -740,318 +731,3 @@
 		"type": "function"
 	}
 ]
-
-
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
-
-/**
- * DeRub
- * @dev Decentralized DRUB token backed by HASH
- */
-
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-
-interface IUniswapV3PoolMinimal {
-    function slot0() external view returns (
-        uint160 sqrtPriceX96,
-        int24, uint16, uint16, uint16, uint8, bool
-    );
-    function liquidity() external view returns (uint128);
-}
-
-contract DeRub is ERC20, ReentrancyGuard {
-    using SafeERC20 for IERC20;
-
-    // === IMMUTABLES ===
-    address public immutable HASH;         // HASH token address
-    uint8   public constant HASH_DECIMALS = 18; // HASH decimals fixed to 18
-
-    // === STATE ===
-    address public treasury;              // Treasury address
-    address public pool;                  // Uniswap V3 pool (token0 = DRUB, token1 = HASH)
-    address public owner;                 // Owner until renounceOwnership
-
-    uint256 public constant COLLATERAL_FACTOR = 80; // Max borrowable % of collateral
-
-    mapping(address => uint256) public collateral; // User HASH collateral
-    mapping(address => uint256) public debt;       // User DRUB debt
-
-    // === Debtors list ===
-    address[] public debtors;
-    mapping(address => bool) public inDebtors;     // flag if an address is in debtors
-    mapping(address => uint256) public debtorIndex; // 1-based index in debtors array (0 = not present)
-
-    // === CONSTRUCTOR ===
-    constructor(
-        address _hash,
-        address _treasury,
-        address _pool
-    ) ERC20("De Ruble", "DRUB") {
-        require(_hash != address(0), "ZERO_HASH");
-        require(_treasury != address(0), "ZERO_TREASURY");
-        require(_pool != address(0), "ZERO_POOL");
-
-        HASH = _hash;
-        treasury = _treasury;
-        pool = _pool;
-        owner = msg.sender;
-    }
-
-    // =================================================
-    //                  MODIFIERS
-    // =================================================
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "NOT_OWNER");
-        _;
-    }
-
-    // ---------------- OWNER FUNCTIONS ----------------
-
-    /// @notice Update Uniswap V3 pool for price oracle
-    function setPool(address newPool) external onlyOwner {
-        require(newPool != address(0), "ZERO");
-        pool = newPool;
-    }
-
-    /// @notice Update treasury address
-    function setTreasury(address newTreasury) external onlyOwner {
-        require(newTreasury != address(0), "ZERO");
-        treasury = newTreasury;
-    }
-
-    /// @notice Renounce ownership to make contract fully decentralized
-    function renounceOwnership() external onlyOwner {
-        owner = address(0);
-    }
-
-    // ---------------- ORACLE (SPOT, SAFE) ----------------
-
-    function getHashPerDrubScaled() public view returns (uint256 priceScaled) {
-        IUniswapV3PoolMinimal P = IUniswapV3PoolMinimal(pool);
-        require(P.liquidity() > 0, "NO_LIQ");
-        (uint160 sqrtPriceX96,, , , , , ) = P.slot0();
-
-        uint256 a = (uint256(sqrtPriceX96) * 1e18) / (2**96);
-        uint256 b = uint256(sqrtPriceX96) / (2**96);
-
-        priceScaled = a * b;
-        require(priceScaled > 0, "PRICE0");
-    }
-
-    function getDrubPerHash() public view returns (uint256 drubPerHashScaled) {
-        uint256 hashPerDrub = getHashPerDrubScaled();
-        require(hashPerDrub > 0, "PRICE0");
-        drubPerHashScaled = (1e36) / hashPerDrub;
-    }
-
-    function _hashToDrub(uint256 h) internal view returns (uint256) {
-        uint256 drubPerHash = getDrubPerHash();
-        return (h * drubPerHash) / 1e18;
-    }
-
-    // ---------------- DEBTORS LIST HELPERS ----------------
-
-    /// @notice Add user to debtors array if not present. 1-based index stored.
-    function _addDebtor(address user) internal {
-        if (debtorIndex[user] == 0) {
-            debtors.push(user);
-            debtorIndex[user] = debtors.length; // 1-based
-            inDebtors[user] = true;
-        }
-    }
-
-    /// @notice Remove user from debtors array (swap & pop). Safe when user not present.
-    function _removeDebtor(address user) internal {
-        uint256 idx = debtorIndex[user];
-        if (idx == 0) {
-            // not present
-            inDebtors[user] = false;
-            return;
-        }
-        uint256 last = debtors.length;
-        if (idx < last) {
-            address lastAddr = debtors[last - 1];
-            debtors[idx - 1] = lastAddr;
-            debtorIndex[lastAddr] = idx;
-        }
-        debtors.pop();
-        debtorIndex[user] = 0;
-        inDebtors[user] = false;
-    }
-
-    /// Public getters for debtors
-    function debtorsLength() external view returns (uint256) {
-        return debtors.length;
-    }
-
-    function getDebtor(uint256 index) external view returns (address) {
-        return debtors[index];
-    }
-
-    // ---------------- INTERNAL AUTO-LIQUIDATION ----------------
-
-    /// @notice Auto-liquidate a user if debt exceeds max allowed
-    function _autoLiquidate(address user) internal {
-        uint256 d = debt[user];
-        if (d == 0) {
-            // nothing to do
-            return;
-        }
-        if (d <= maxDebt(user)) {
-            // healthy
-            return;
-        }
-
-        uint256 seized = collateral[user];
-
-        // zero out position
-        collateral[user] = 0;
-        debt[user] = 0;
-
-        // transfer HASH collateral to treasury
-        if (seized > 0) {
-            IERC20(HASH).safeTransfer(treasury, seized);
-        }
-
-        // mint DRUB equivalent to treasury (as in V1)
-        uint256 drubAmount = 0;
-        if (seized > 0) {
-            drubAmount = _hashToDrub(seized);
-            _mint(treasury, drubAmount);
-        }
-
-        // remove from debtors list if present
-        if (inDebtors[user]) {
-            _removeDebtor(user);
-        }
-    }
-
-    /// @notice Maximum debt allowed for a user based on collateral
-    function maxDebt(address u) public view returns (uint256) {
-        return (_hashToDrub(collateral[u]) * COLLATERAL_FACTOR) / 100;
-    }
-
-    // ---------------- COLLATERAL ----------------
-
-    /// @notice Deposit HASH as collateral
-    function depositCollateral(uint256 amount) external {
-        _autoLiquidate(msg.sender);
-        IERC20(HASH).safeTransferFrom(msg.sender, address(this), amount);
-        collateral[msg.sender] += amount;
-    }
-
-    /// @notice Withdraw HASH collateral with debt check
-    function withdrawCollateral(uint256 amount) external {
-        _autoLiquidate(msg.sender);
-        require(collateral[msg.sender] >= amount, "NO_COLL");
-        collateral[msg.sender] -= amount;
-        require(debt[msg.sender] <= maxDebt(msg.sender), "UNDER");
-        IERC20(HASH).safeTransfer(msg.sender, amount);
-    }
-
-    // ---------------- BORROW ----------------
-
-    /// @notice Borrow DRUB against HASH collateral
-    function borrowDRUB(uint256 amount) external {
-        _autoLiquidate(msg.sender);
-        require(debt[msg.sender] + amount <= maxDebt(msg.sender), "LIMIT");
-        debt[msg.sender] += amount;
-        _mint(msg.sender, amount);
-
-        // add to debtors list if this is a borrower (debt > 0)
-        if (debt[msg.sender] > 0) {
-            _addDebtor(msg.sender);
-        }
-    }
-
-    /// @notice Repay DRUB debt
-    function repay(uint256 amount) external {
-        _autoLiquidate(msg.sender);
-        _burn(msg.sender, amount);
-        require(debt[msg.sender] >= amount, "REPAY_TOO_MUCH");
-        debt[msg.sender] -= amount;
-
-        // remove from debtors if fully repaid
-        if (debt[msg.sender] == 0 && inDebtors[msg.sender]) {
-            _removeDebtor(msg.sender);
-        }
-    }
-
-    // ---------------- BUY ----------------
-
-    /// @notice Buy DRUB using HASH; DRUB equivalent goes to treasury
-    function buyDRUB(uint256 hashAmount) external {
-        _autoLiquidate(msg.sender);
-        uint256 drubAmount = _hashToDrub(hashAmount);
-
-        // 1. Transfer HASH to treasury
-        IERC20(HASH).safeTransferFrom(msg.sender, treasury, hashAmount);
-
-        // 2. Mint DRUB to user
-        _mint(msg.sender, drubAmount);
-
-        // 3. Mint DRUB equivalent to treasury
-        _mint(treasury, drubAmount);
-    }
-
-    // ---------------- MANUAL LIQUIDATION ----------------
-
-    /// @notice Anyone can manually liquidate a specific user
-    function liquidate(address user) external nonReentrant {
-        _autoLiquidate(user);
-    }
-
-    /// @notice Batch liquidation: scan the debtors list and liquidate up to maxCount users.
-    /// Iteration uses swap-pop removal semantics; when a debtor is removed during iteration,
-    /// the swapped-in address sits at the same index and will be checked next.
-    function liquidateBatch(uint256 maxCount) external nonReentrant {
-        uint256 len = debtors.length;
-        if (len == 0 || maxCount == 0) return;
-
-        uint256 i = 0;
-        uint256 liquidated = 0;
-
-        // loop while i < debtors.length and liquidated < maxCount
-        while (i < debtors.length && liquidated < maxCount) {
-            address user = debtors[i];
-            // If user still liquidatable -> liquidate (this will remove them from array by swap-pop)
-            if (debt[user] > 0 && debt[user] > maxDebt(user)) {
-                // perform liquidation
-                _autoLiquidate(user);
-                liquidated++;
-                // Note: _autoLiquidate removed 'user' and moved last element into index i,
-                // so do NOT increment i here — need to re-check the new element at i.
-            } else {
-                // not liquidatable (or zero debt) -> move to next index
-                i++;
-            }
-        }
-    }
-
-    // ---------------- VIEW HELPERS ----------------
-
-    /// @notice Get list of debtors (careful: can be large)
-    function getDebtors(uint256 start, uint256 count) external view returns (address[] memory list) {
-        uint256 total = debtors.length;
-
-        if (start >= total) {
-            return new address[](0);
-        }
-
-        uint256 end = start + count;
-        if (end > total) {
-            end = total;
-        }
-
-        uint256 len = end - start;
-        list = new address[](len);
-
-        for (uint256 i = 0; i < len; i++) {
-            list[i] = debtors[start + i];
-        }
-    }
-}

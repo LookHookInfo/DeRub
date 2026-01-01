@@ -1,18 +1,25 @@
-0x0F7d469cefA13B8Fca207fe90f4C4121BE1da4BA
-
-[{"inputs":[{"internalType":"address","name":"initialDrub","type":"address"},{"internalType":"address","name":"initialPool","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount0","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount1","type":"uint256"}],"name":"LiquidityAdded","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"oldPool","type":"address"},{"indexed":false,"internalType":"address","name":"newPool","type":"address"}],"name":"PoolUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"oldToken","type":"address"},{"indexed":false,"internalType":"address","name":"newToken","type":"address"}],"name":"TokenUpdated","type":"event"},{"inputs":[],"name":"FEE","outputs":[{"internalType":"uint24","name":"","type":"uint24"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"HASH","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"POSITION_MANAGER","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"addLiquidity","outputs":[{"internalType":"uint256","name":"positionId","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"currentPositionId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"drubToken","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getPrice","outputs":[{"internalType":"uint256","name":"price","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"poolAddress","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newToken","type":"address"}],"name":"updateDrubToken","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newPool","type":"address"}],"name":"updatePool","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+0xe329417041DA9Ffb6637ba7eDe8B583A207BdA01
 
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
 /**
- * @title DrubTreasuryVault (purpose — providing liquidity)
- * @dev Vault for DRUB and HASH.
- * Anyone can add liquidity (Uniswap V3 NFT positions).
+ * @title DrubTreasuryVault
+ * @dev Treasury vault providing Uniswap V3 liquidity for DRUB / HASH.
+ * Anyone can add liquidity.
+ * Anyone can irreversibly burn ALL LP NFTs (lock forever).
  */
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+
+interface IERC721Minimal {
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) external;
+}
 
 interface INonfungiblePositionManager {
     struct MintParams {
@@ -34,21 +41,21 @@ interface INonfungiblePositionManager {
         payable
         returns (
             uint256 tokenId,
-            uint128 liquidity,
-            uint256 amount0,
-            uint256 amount1
+            uint128,
+            uint256,
+            uint256
         );
 }
 
 interface IUniswapV3Pool {
     function slot0() external view returns (
         uint160 sqrtPriceX96,
-        int24 tick,
-        uint16 observationIndex,
-        uint16 observationCardinality,
-        uint16 observationCardinalityNext,
-        uint8 feeProtocol,
-        bool unlocked
+        int24,
+        uint16,
+        uint16,
+        uint16,
+        uint8,
+        bool
     );
 }
 
@@ -56,13 +63,19 @@ contract DrubTreasuryVault is Ownable {
 
     address public constant HASH = 0xA9B631ABcc4fd0bc766d7C0C8fCbf866e2bB0445;
     address public constant POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1;
+    address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
+
     uint24 public constant FEE = 100;
 
     address public drubToken;
     address public poolAddress;
+
     uint256 public currentPositionId;
+    uint256[] public allPositionIds;
 
     event LiquidityAdded(uint256 id, uint256 amount0, uint256 amount1);
+    event PositionBurned(uint256 id);
+    event AllPositionsBurned(uint256 count);
     event PoolUpdated(address oldPool, address newPool);
     event TokenUpdated(address oldToken, address newToken);
 
@@ -78,7 +91,7 @@ contract DrubTreasuryVault is Ownable {
     }
 
     // -------------------------------------------------
-    // Price from Uniswap pool
+    // Price
     // -------------------------------------------------
     function getPrice() public view returns (uint256 price) {
         (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(poolAddress).slot0();
@@ -97,32 +110,25 @@ contract DrubTreasuryVault is Ownable {
         uint256 amount1;
     }
 
-    /**
-     * @notice Determines token0 based on total value in vault.
-     * Token with smaller total value becomes token0.
-     */
     function _computeAmounts(uint256 price) internal view returns (Amounts memory A) {
         uint256 hb = IERC20(HASH).balanceOf(address(this));
         uint256 db = IERC20(drubToken).balanceOf(address(this));
         require(hb > 0 && db > 0, "empty vault");
 
-        // total value of HASH in terms of DRUB
         uint256 hashValue = (hb * price) / 1e18;
-
-        // base token is the one with smaller total value
         bool baseHash = hashValue <= db;
 
         address base = baseHash ? HASH : drubToken;
         address quote = baseHash ? drubToken : HASH;
 
         uint256 baseAmt = baseHash ? hb : db;
-        uint256 quoteAmt = baseHash ? (hashValue * 1e18 / price) : (db * price / 1e18);
+        uint256 quoteAmt = baseHash
+            ? (hashValue * 1e18 / price)
+            : (db * price / 1e18);
 
-        // make sure we don’t exceed available amounts
         uint256 realQuote = baseHash ? db : hb;
         if (quoteAmt > realQuote) quoteAmt = realQuote;
 
-        // token0 must be smaller address
         (A.token0, A.token1) = base < quote ? (base, quote) : (quote, base);
         A.amount0 = base == A.token0 ? baseAmt : quoteAmt;
         A.amount1 = base == A.token0 ? quoteAmt : baseAmt;
@@ -156,9 +162,34 @@ contract DrubTreasuryVault is Ownable {
         Amounts memory A = _computeAmounts(price);
 
         positionId = _mintPosition(A);
+
         currentPositionId = positionId;
+        allPositionIds.push(positionId);
 
         emit LiquidityAdded(positionId, A.amount0, A.amount1);
+    }
+
+    // -------------------------------------------------
+    // Burn ALL LP NFTs (public, irreversible)
+    // -------------------------------------------------
+    function burnAllPositions() external {
+        uint256 len = allPositionIds.length;
+        require(len > 0, "no positions");
+
+        for (uint256 i = 0; i < len; i++) {
+            uint256 id = allPositionIds[i];
+            IERC721Minimal(POSITION_MANAGER).safeTransferFrom(
+                address(this),
+                DEAD,
+                id
+            );
+            emit PositionBurned(id);
+        }
+
+        delete allPositionIds;
+        currentPositionId = 0;
+
+        emit AllPositionsBurned(len);
     }
 
     // -------------------------------------------------
@@ -177,3 +208,355 @@ contract DrubTreasuryVault is Ownable {
         IERC20(newToken).approve(POSITION_MANAGER, type(uint256).max);
     }
 }
+
+______________________________________________________________________________________________________________________________________________
+[
+	{
+		"inputs": [],
+		"name": "addLiquidity",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "positionId",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "burnAllPositions",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "initialDrub",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "initialPool",
+				"type": "address"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "owner",
+				"type": "address"
+			}
+		],
+		"name": "OwnableInvalidOwner",
+		"type": "error"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "account",
+				"type": "address"
+			}
+		],
+		"name": "OwnableUnauthorizedAccount",
+		"type": "error"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "count",
+				"type": "uint256"
+			}
+		],
+		"name": "AllPositionsBurned",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "id",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount0",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount1",
+				"type": "uint256"
+			}
+		],
+		"name": "LiquidityAdded",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "previousOwner",
+				"type": "address"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "newOwner",
+				"type": "address"
+			}
+		],
+		"name": "OwnershipTransferred",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "oldPool",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "newPool",
+				"type": "address"
+			}
+		],
+		"name": "PoolUpdated",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "id",
+				"type": "uint256"
+			}
+		],
+		"name": "PositionBurned",
+		"type": "event"
+	},
+	{
+		"inputs": [],
+		"name": "renounceOwnership",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "oldToken",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "newToken",
+				"type": "address"
+			}
+		],
+		"name": "TokenUpdated",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "newOwner",
+				"type": "address"
+			}
+		],
+		"name": "transferOwnership",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "newToken",
+				"type": "address"
+			}
+		],
+		"name": "updateDrubToken",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "newPool",
+				"type": "address"
+			}
+		],
+		"name": "updatePool",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "allPositionIds",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "currentPositionId",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "DEAD",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "drubToken",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "FEE",
+		"outputs": [
+			{
+				"internalType": "uint24",
+				"name": "",
+				"type": "uint24"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getPrice",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "price",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "HASH",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "owner",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "poolAddress",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "POSITION_MANAGER",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]
