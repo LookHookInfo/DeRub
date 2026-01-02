@@ -1,99 +1,63 @@
-# Decentralized Ruble (DRUB) Lending Protocol
+# Decentralized Ruble (DRUB) Protocol v3
 
 **Developed by [lookhook.info](https://lookhook.info/)**
 
-## Core Concept
+This project is a decentralized application (DApp) for interacting with the DRUB Protocol on the Base network. The protocol introduces a simplified, robust mechanism for creating a stablecoin pegged to the Russian Ruble, backed by cryptocurrency assets.
 
-The Decentralized Ruble Lending Protocol is a smart contract that enables users to borrow the DRUB stablecoin against cryptocurrency assets. In its current MVP stage, the protocol combines a decentralized architecture with a centralized oracle for price feeds.
+This version moves away from a collateralized debt model to a direct purchase and liquidity provision model.
 
-## Key Features
+## Core Concepts
 
-### 1. Collateral Deposits
+The protocol consists of two main smart contracts:
 
-Users can deposit three types of assets as collateral:
+### 1. The `DeRub` Contract
+- **Functionality:** This is an ERC20 token contract for DRUB. Its primary purpose is to allow users to purchase (mint) DRUB tokens by spending HASH tokens.
+- **Price Mechanism:** The exchange rate (`DRUB per HASH`) is calculated using two data points:
+    1.  **USD per HASH:** The price of the HASH token in USD, derived from a Uniswap V3 HASH/USDC liquidity pool.
+    2.  **RUB per USD:** A fiat exchange rate provided by a trusted external oracle.
+- **Treasury Mint:** When a user buys DRUB, an equivalent amount of DRUB is also minted and sent to the `DrubTreasuryVault` contract. This ensures that for every DRUB in circulation, there is a corresponding DRUB in the treasury, ready to be paired with HASH for liquidity.
 
-- **cbBTC:** `0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf` (8 decimals)
-- **Ethereum (ETH):** The native network token
-- **HASH:** `0xA9B631ABcc4fd0bc766d7C0C8fCbf866e2bB0445` (18 decimals)
+### 2. The `DrubTreasuryVault` Contract
+- **Functionality:** This vault acts as the protocol's treasury, accumulating HASH tokens from user purchases and the corresponding DRUB tokens from the treasury mint.
+- **Liquidity Provision:** Anyone can call the `addLiquidity` function on this contract. This function takes the entire HASH and DRUB balance of the vault and uses it to create a new liquidity position on Uniswap V3. This deepens the market for DRUB and decentralizes its liquidity.
+- **Irreversible Liquidity Lock:** The contract includes a `burnAllPositions` function. When called, this function transfers all of the vault's Uniswap V3 LP tokens (represented as NFTs) to a dead address (`0x...dEaD`). This is a **permanent, one-way action** that locks the protocol's liquidity forever, creating a true "liquidity burn".
 
-Collateral is stored directly within the contract, with individual balances tracked in the `collateralBalance` mapping.
+## Features
 
-### 2. Borrowing DRUB
+The dashboard provides a simple interface for the following actions:
+- **Connect Wallet:** Connect to the application on the Base network.
+- **Buy DRUB:** Purchase DRUB tokens using your HASH tokens. The UI handles the necessary `approve` and `buyDRUB` transactions.
+- **View Market Info:** See the current exchange rates (`DRUB per HASH`, `USD per HASH`) and the oracle's fiat price (`RUB per USD`).
+- **Manage Treasury Vault:**
+    - View the current HASH and DRUB balances held within the treasury.
+    - Initiate the `addLiquidity` transaction.
+    - Initiate the irreversible `burnAllPositions` transaction (use with extreme caution).
 
-The maximum loan amount is calculated using the following formula:
+## Getting Started
 
-```solidity
-Max Loan = (Total Collateral Value in DRUB) * 80%
-```
+To run this project locally:
 
-Users can borrow any amount of DRUB up to this limit, which is then minted to their wallet.
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    ```
 
-### 3. Liquidation Mechanism
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    # or
+    yarn install
+    ```
 
-Liquidation is a critical function that protects the protocol. It is triggered when the following condition is met:
+3.  **Set up environment variables:**
+    Create a `.env` file in the root of the project and add your Thirdweb client ID:
+    ```
+    NEXT_PUBLIC_THIRDWEB_CLIENT_ID=your_thirdweb_client_id
+    ```
 
-```solidity
-Debt > 80% of Collateral Value
-```
+4.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
 
-Upon liquidation:
-1.  The user's debt is fully repaid.
-2.  **All collateral is seized** and transferred to the protocol's treasury.
-3.  The user is removed from the list of debtors.
-
-### 4. Buying DRUB with USDC
-
-Users can purchase DRUB directly using USDC. The formula is:
-
-```solidity
-DRUB Amount = (USDC Amount * USDC Price) * 100 / (100 - 5%)
-```
-Where `5%` is the protocol's fee (`USDC_MARKUP`).
-
----
-
-## ⚠️ Important Terms & Risks
-
-### Loan Conditions
-- **Minimum Loan:** Must be greater than 0 DRUB.
-- **Collateralization:** Must always be maintained at a minimum of 125% (the inverse of the 80% loan-to-value ratio).
-- **Debtor List:** A user is automatically added to the list of debtors upon taking their first loan.
-
-### User Risks
-- **Total Loss of Collateral:** In a liquidation event, the user loses their entire collateral.
-- **Oracle Dependency:** The protocol's health and liquidation calculations are dependent on the prices provided by the centralized oracle.
-- **Volatility:** The value of collateral assets can fluctuate rapidly, which may quickly change a user's collateralization level and lead to liquidation.
-
----
-
-## ️ Governance & Oracle
-
-### Current MVP Model
-- **Oracle:** A centralized `priceUpdater` address is responsible for setting asset prices.
-- **Ownership:** The contract owner has the authority to change the `priceUpdater` address. The contract also includes a function to renounce ownership completely.
-
-### Price Update Mechanism
-- Prices can be updated in batches via the `setPrices()` function.
-- Only trusted addresses designated by the owner can update prices.
-- Zero-value prices are not permitted.
-
----
-
-## Technical Features
-
-### Optimizations
-- **O(1) Debtor Removal:** A mapping-based index allows for efficient (O(1)) removal of users from the debtors list during liquidation.
-- **Gas Savings:** `unchecked` blocks are used in loops for gas efficiency, and custom errors are used instead of `require` statements.
-
-### Security
-- **Checks-Effects-Interactions Pattern:** Implemented to prevent re-entrancy attacks.
-- **`nonReentrant` Modifier:** Provides an additional layer of protection against re-entrancy.
-- **Pre-computation Checks:** The protocol validates collateralization levels before allowing collateral withdrawal to prevent undercollateralized positions.
-
----
-
-## Conclusion
-
-The Decentralized Ruble protocol offers a simple yet powerful mechanism for crypto-backed lending. Its strict liquidation mechanism (seizure of all collateral) is designed to robustly protect the protocol from risk but requires users to diligently monitor their collateralization level.
-
-This MVP version, with its centralized oracle, lays a secure and predictable foundation for future decentralization and expansion.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.

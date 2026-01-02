@@ -29,7 +29,8 @@ const DeRubManager = () => {
     userDrubBalance,
     vaultHashBalance,
     vaultDrubBalance,
-    hasLPPositions, // New: from useDeRubData hook
+    hasLPPositions,
+    lpBalance, 
     refetchAll,
   } = useDeRubData();
 
@@ -37,7 +38,7 @@ const DeRubManager = () => {
 
   const handleBuy = async () => {
     if (!account || !buyAmount || parseFloat(buyAmount) <= 0) {
-      alert('Please enter a valid amount.');
+      console.error('Please enter a valid amount.');
       return;
     }
     const amountWei = toWei(buyAmount);
@@ -58,8 +59,6 @@ const DeRubManager = () => {
           amount: buyAmount 
         });
         await sendAndConfirmTx(approveTx);
-        // It's good practice to alert the user or have the UI reflect this step
-        alert('Approval successful. You can now proceed with the purchase.');
       }
 
       // 3. Prepare and send the main transaction
@@ -70,13 +69,11 @@ const DeRubManager = () => {
       });
       await sendAndConfirmTx(transaction);
 
-      alert('Purchase successful!');
       setBuyAmount('');
       refetchAll();
 
     } catch (error) {
       console.error('Error during purchase:', error);
-      alert('Error during purchase. See console for details.');
     }
   };
 
@@ -85,27 +82,20 @@ const DeRubManager = () => {
     try {
       const transaction = prepareContractCall({ contract: vaultContract, method: 'addLiquidity', params: [] });
       await sendAndConfirmTx(transaction);
-      alert('Liquidity added successfully!');
       refetchAll();
     } catch (error) {
       console.error('Error adding liquidity:', error);
-      alert('Error adding liquidity. See console for details.');
     }
   };
   
   const handleBurnPositions = async () => {
     if (!account) return;
-    if (!confirm('WARNING: This is an irreversible action. You will burn all LP tokens in the vault, permanently locking the liquidity. Are you sure you want to proceed?')) {
-        return;
-    }
     try {
       const transaction = prepareContractCall({ contract: vaultContract, method: 'burnAllPositions', params: [] });
       await sendAndConfirmTx(transaction);
-      alert('All positions burned successfully!');
       refetchAll();
     } catch (error) {
       console.error('Error burning positions:', error);
-      alert('Error burning positions. See console for details.');
     }
   };
 
@@ -172,7 +162,7 @@ const DeRubManager = () => {
       {/* ----------- Treasury Panel ----------- */}
       <div className="bg-gray-800 p-6 rounded-lg shadow-md w-full">
         <h2 className="text-2xl font-bold text-white mb-4">Treasury Vault</h2>
-        <div className="grid grid-cols-2 gap-4 mb-4 text-white">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-white">
             <div className="bg-gray-700 p-4 rounded-lg">
                 <div className="text-sm text-gray-400">Vault HASH Balance</div>
                 <div className="text-lg">{parseFloat(vaultHashBalance).toFixed(4)}</div>
@@ -180,6 +170,10 @@ const DeRubManager = () => {
             <div className="bg-gray-700 p-4 rounded-lg">
                 <div className="text-sm text-gray-400">Vault DRUB Balance</div>
                 <div className="text-lg">{parseFloat(vaultDrubBalance).toFixed(4)}</div>
+            </div>
+            <div className="bg-gray-700 p-4 rounded-lg">
+                <div className="text-sm text-gray-400">LP to Burn</div>
+                <div className="text-lg">{lpBalance}</div>
             </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
@@ -192,7 +186,7 @@ const DeRubManager = () => {
             </button>
             <button
               onClick={handleBurnPositions}
-              disabled={isTxPending}
+              disabled={isBurnPositionsDisabled}
               className="bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-600 w-full"
             >
               {isTxPending ? 'Working...' : 'Burn All LP Tokens'}

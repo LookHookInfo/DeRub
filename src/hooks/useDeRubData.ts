@@ -14,9 +14,11 @@ import {
 } from '../app/contracts';
 import { balanceOf } from 'thirdweb/extensions/erc20';
 
-// --- ERC20 ABI for balance checks ---
-// A minimal ERC20 ABI that includes the `balanceOf` function.
-const ERC20_ABI = [
+const NFPM_CONTRACT_ADDRESS = '0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1';
+
+// --- ERC20/ERC721 ABI for balance checks ---
+// A minimal ABI that includes the `balanceOf` function, compatible with both ERC20 and ERC721.
+const BALANCE_OF_ABI = [
   {
     "constant": true,
     "inputs": [{"name": "_owner","type": "address"}],
@@ -46,14 +48,21 @@ export const hashTokenContract = getContract({
     client,
     address: HASH_TOKEN_ADDRESS,
     chain,
-    abi: ERC20_ABI, 
+    abi: BALANCE_OF_ABI, 
 });
 
 export const drubTokenContract = getContract({
     client,
     address: DRUB_TOKEN_ADDRESS,
     chain,
-    abi: ERC20_ABI,
+    abi: BALANCE_OF_ABI,
+});
+
+export const nfpmContract = getContract({
+    client,
+    address: NFPM_CONTRACT_ADDRESS,
+    chain,
+    abi: BALANCE_OF_ABI,
 });
 
 
@@ -72,6 +81,7 @@ export const useDeRubData = () => {
   const [vaultHashBalance, setVaultHashBalance] = useState('0');
   const [vaultDrubBalance, setVaultDrubBalance] = useState('0');
   const [hasLPPositions, setHasLPPositions] = useState(false);
+  const [lpBalance, setLpBalance] = useState('0');
   
   // --- Read Hooks for Contract Data ---
   const { data: drubPerHashData, refetch: refetchDrubPerHash } = useReadContract({
@@ -92,10 +102,11 @@ export const useDeRubData = () => {
     params: [],
   });
 
-  const { data: allPositionIdsData, refetch: refetchAllPositionIds } = useReadContract({
-    contract: vaultContract,
-    method: 'allPositionIds',
-    params: [],
+  // Check the vault's balance of LP NFTs
+  const { data: lpBalanceData, refetch: refetchLpBalance } = useReadContract({
+    contract: nfpmContract,
+    method: 'balanceOf',
+    params: [VAULT_CONTRACT_ADDRESS],
   });
 
   // --- Balance Fetching Logic ---
@@ -124,9 +135,9 @@ export const useDeRubData = () => {
     refetchDrubPerHash();
     refetchRubPerUsd();
     refetchUsdPerHash();
-    refetchAllPositionIds(); // Refetch LP positions
+    refetchLpBalance(); // Refetch LP balance
     fetchBalances();
-  }, [refetchDrubPerHash, refetchRubPerUsd, refetchUsdPerHash, refetchAllPositionIds, fetchBalances]);
+  }, [refetchDrubPerHash, refetchRubPerUsd, refetchUsdPerHash, refetchLpBalance, fetchBalances]);
 
   useEffect(() => {
     refetchAll();
@@ -154,13 +165,11 @@ export const useDeRubData = () => {
   }, [usdPerHashData]);
 
   useEffect(() => {
-    console.log("allPositionIdsData:", allPositionIdsData);
-    if (allPositionIdsData !== undefined) {
-      const hasPositions = Array.isArray(allPositionIdsData) && allPositionIdsData.length > 0;
-      setHasLPPositions(hasPositions);
-      console.log("hasLPPositions:", hasPositions);
+    if (lpBalanceData !== undefined) {
+      setHasLPPositions(lpBalanceData > 0n);
+      setLpBalance(lpBalanceData.toString());
     }
-  }, [allPositionIdsData]);
+  }, [lpBalanceData]);
 
 
   return {
@@ -173,6 +182,7 @@ export const useDeRubData = () => {
     vaultHashBalance,
     vaultDrubBalance,
     hasLPPositions,
+    lpBalance,
     
     // Refetch Function
     refetchAll,
