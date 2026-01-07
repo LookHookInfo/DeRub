@@ -1,4 +1,4 @@
-контракт 0x1339c3a22ccdd7560B4Ccacd065Cd4b578BDA12d
+contract 0x1339c3a22ccdd7560B4Ccacd065Cd4b578BDA12d
 
 // SPDX-License-Identifier: MIT
 

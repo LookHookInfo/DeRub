@@ -1,39 +1,91 @@
-# Decentralized Ruble (DRUB) Protocol v3
+# DRUB — An Experimental Ruble Stablecoin on Base
 
-**Developed by [lookhook.info](https://lookhook.info/)**
+DRUB is a decentralized ruble-denominated stablecoin launched by the LOOKHOOK team as an experimental project running in production. The token operates on the Base network and is designed to demonstrate a transparent, on-chain economic model without banks or custodial intermediaries.
 
-This project is a decentralized application (DApp) for interacting with the DRUB Protocol on the Base network. The protocol introduces a simplified, robust mechanism for creating a stablecoin pegged to the Russian Ruble, backed by cryptocurrency assets.
+## Why DRUB Exists
 
-This version moves away from a collateralized debt model to a direct purchase and liquidity provision model.
+The core idea behind DRUB is to prove that a fiat-referenced stablecoin can exist:
 
-## Core Concepts
+- without banks
+- without custodial liquidity
+- with transparent minting logic
+- and with permanently growing on-chain liquidity
 
-The protocol consists of two main smart contracts:
+DRUB is launched as an experiment, but it already operates with real contracts, real liquidity, and real users.
 
-### 1. The `DeRub` Contract
-- **Functionality:** This is an ERC20 token contract for DRUB. Its primary purpose is to allow users to purchase (mint) DRUB tokens by spending HASH tokens.
-- **Price Mechanism:** The exchange rate (`DRUB per HASH`) is calculated using two data points:
-    1.  **USD per HASH:** The price of the HASH token in USD, derived from a Uniswap V3 HASH/USDC liquidity pool.
-    2.  **RUB per USD:** A fiat exchange rate provided by a trusted external oracle.
-- **Treasury Mint:** When a user buys DRUB, an equivalent amount of DRUB is also minted and sent to the `DrubTreasuryVault` contract. This ensures that for every DRUB in circulation, there is a corresponding DRUB in the treasury, ready to be paired with HASH for liquidity.
+## Network and Contract Addresses
 
-### 2. The `DrubTreasuryVault` Contract
-- **Functionality:** This vault acts as the protocol's treasury, accumulating HASH tokens from user purchases and the corresponding DRUB tokens from the treasury mint.
-- **Liquidity Provision:** Anyone can call the `addLiquidity` function on this contract. This function takes the entire HASH and DRUB balance of the vault and uses it to create a new liquidity position on Uniswap V3. This deepens the market for DRUB and decentralizes its liquidity.
-- **Irreversible Liquidity Lock:** The contract includes a `burnAllPositions` function. When called, this function transfers all of the vault's Uniswap V3 LP tokens (represented as NFTs) to a dead address (`0x...dEaD`). This is a **permanent, one-way action** that locks the protocol's liquidity forever, creating a true "liquidity burn".
+- **Network:** Base
+- **DRUB Token:** `0x1339c3a22ccdd7560B4Ccacd065Cd4b578BDA12d`
+- **Treasury Contract:** `0xd2237A2f81C8Fce8d61919e2e35639897848722d`
+- **DRUB / HASH Uniswap V3 Pool:** `0x3609869E22C1f1FeC32b9426aa969F4FC7a3fDb1`
 
-## Features
+## How DRUB Pricing Works
 
-The dashboard provides a simple interface for the following actions:
-- **Connect Wallet:** Connect to the application on the Base network.
-- **Buy DRUB:** Purchase DRUB tokens using your HASH tokens. The UI handles the necessary `approve` and `buyDRUB` transactions.
-- **View Market Info:** See the current exchange rates (`DRUB per HASH`, `USD per HASH`) and the oracle's fiat price (`RUB per USD`).
-- **Manage Treasury Vault:**
-    - View the current HASH and DRUB balances held within the treasury.
-    - Initiate the `addLiquidity` transaction.
-    - Initiate the irreversible `burnAllPositions` transaction (use with extreme caution).
+At the time of writing, the price provider contract is temporarily controlled by the LOOKHOOK team.
 
-## Getting Started
+1.  The ruble price is sourced from the **Central Bank of the Russian Federation**.
+2.  This price is used only as an input reference for minting DRUB.
+3.  DRUB can be purchased **exclusively with Hashcoin**, as it is a native asset of the Look Hook ecosystem.
+
+In other words, DRUB uses a fiat reference price (RUB) but is not a bank-issued or custodial asset and is not backed by off-chain reserves.
+
+## DRUB Purchase Mechanics
+
+The purchase flow is fully on-chain and intentionally simple:
+
+1.  A user buys DRUB using **Hashcoin**.
+2.  The contract converts RUB → HASH using the reference price.
+3.  DRUB is minted to the buyer.
+4.  An equal amount of DRUB and the HASH payment are sent to the treasury contract.
+
+**Important:**
+- No funds are withdrawn.
+- No liquidity is sold.
+- The system only accumulates and locks liquidity.
+
+## Treasury Contract & Liquidity Decentralization
+
+The treasury contract (`0xd2237A2f81C8Fce8d61919e2e35639897848722d`):
+
+- has **no owner**.
+- is **not controlled by the team**.
+- has all administrative rights removed.
+
+It exposes only two public functions:
+1.  Aggregate accumulated DRUB and HASH.
+2.  Add liquidity to Uniswap V3 and **burn the LP tokens** (sent to `0x...dEaD`).
+
+Anyone can call these functions, making the treasury fully decentralized and trustless.
+
+## Uniswap Pool & Market Arbitrage
+
+Liquidity in the DRUB/HASH Uniswap V3 pool (`0x3609869E22C1f1FeC32b9426aa969F4FC7a3fDb1`):
+
+- grows continuously.
+- is **permanently locked** (LP tokens are burned).
+- cannot be withdrawn by the team or any third party.
+
+Price alignment is expected to occur naturally through arbitrage, balancing the reference RUB price used for minting and the market price inside the decentralized pool.
+
+## DRUB Model Summary
+
+At its current stage, DRUB features:
+
+- ✔️ Reference RUB price sourced from the Central Bank of Russia.
+- ✔️ Purchase exclusively via Hashcoin.
+- ✔️ Minting without debt or lending mechanics.
+- ✔️ All liquidity locked on-chain.
+- ✔️ Uniswap pool with no rug-pull risk.
+- ✔️ Experimental but live and functioning design.
+
+DRUB is not a promise of perfect stability. It is an experiment in honest, transparent, and irreversible token economics.
+
+## Important Notice
+
+DRUB is launched as an experimental token. The model may evolve, be refined, or adjusted as the Look Hook ecosystem grows. This project does not constitute financial advice and is not a bank-issued or government-backed instrument.
+
+## Getting Started (Locally)
 
 To run this project locally:
 

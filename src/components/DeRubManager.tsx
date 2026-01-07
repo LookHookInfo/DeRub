@@ -84,10 +84,40 @@ const DeRubManager = () => {
   };
 
   const handleAddLiquidity = async () => {
-    if (!account) return;
+    console.log('--- handleAddLiquidity triggered ---');
+    console.log('Checking account:', account);
+    if (!account) {
+      console.error('No active account found. Aborting.');
+      return;
+    }
+
+    // Also log the values used for the disabled check
+    console.log('Vault HASH Balance:', vaultHashBalance);
+    console.log('Vault DRUB Balance:', vaultDrubBalance);
+    console.log('isAddLiquidityDisabled:', isAddLiquidityDisabled);
+
+    if (isAddLiquidityDisabled) {
+        console.error('Button is disabled, but was clicked. This should not happen.');
+        return;
+    }
+
     try {
-      const transaction = prepareContractCall({ contract: vaultContract, method: 'addLiquidity', params: [] });
+      console.log('Preparing contract call...');
+      console.log('Contract:', vaultContract.address);
+      console.log('Method: addLiquidity');
+
+      const transaction = prepareContractCall({ 
+        contract: vaultContract, 
+        method: 'addLiquidity', 
+        params: [] 
+      });
+
+      console.log('Transaction prepared:', transaction);
+      console.log('Sending and confirming transaction...');
+
       await sendAndConfirmTx(transaction);
+      
+      console.log('Transaction confirmed! Refetching all data.');
       refetchAll();
     } catch (error) {
       console.error('Error adding liquidity:', error);
